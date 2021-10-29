@@ -1,0 +1,498 @@
+- include_role:
+    name: tuned
+  name: Configure tuned before reboot
+  vars:
+    tuned_isolated_cores: ''
+    tuned_profile: throughput-performance
+  when: step|int == 0
+- include_role:
+    name: tripleo-kernel
+    tasks_from: kernelargs.yml
+  name: Configure kernel args and reboot
+  vars:
+    tripleo_kernel_args: ''
+    tripleo_kernel_defer_reboot: false
+    tripleo_kernel_reboot_timeout: 900
+  when: step|int == 0
+- import_role:
+    name: tripleo-container-tag
+  name: Cinder Volume tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-cinder-volume:16.2
+    container_image_latest: cluster.common.tag/openstack-cinder-volume:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: Cinder volume puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: openstack-cinder-volume
+      tripleo_ha_wrapper_puppet_config_volume: cinder
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: include ::tripleo::profile::base::pacemaker;
+        include ::tripleo::profile::pacemaker::cinder::volume_bundle
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ip,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: openstack-cinder-volume
+      tripleo_ha_wrapper_resource_state: _ Started
+      tripleo_ha_wrapper_service_name: cinder_volume
+  name: Cinder Volume HA Wrappers Step
+  when: step|int == 5
+- block:
+  - name: Check if rsyslog exists
+    register: rsyslog_config
+    shell: systemctl is-active rsyslog
+  - block:
+    - blockinfile:
+        content: 'if $syslogfacility-text == ''{{facility}}'' and $programname ==
+          ''haproxy'' then -/var/log/containers/haproxy/haproxy.log
+
+          & stop
+
+          '
+        create: true
+        path: /etc/rsyslog.d/openstack-haproxy.conf
+      name: Forward logging to haproxy.log file
+      register: logconfig
+      vars:
+        facility: local0
+    - name: restart rsyslog service after logging conf change
+      service:
+        name: rsyslog
+        state: restarted
+      when: logconfig is changed
+    when:
+    - rsyslog_config is changed
+    - rsyslog_config.rc == 0
+  name: Configure rsyslog for HAproxy container managed by Pacemaker
+  when: step|int == 1
+- import_role:
+    name: tripleo-container-tag
+  name: HAproxy tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-haproxy:16.2
+    container_image_latest: cluster.common.tag/openstack-haproxy:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: HAproxy puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: haproxy-bundle
+      tripleo_ha_wrapper_puppet_config_volume: haproxy
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: include ::tripleo::profile::base::pacemaker;
+        include ::tripleo::profile::pacemaker::haproxy_bundle
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ip,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: haproxy-bundle
+      tripleo_ha_wrapper_resource_state: Started
+      tripleo_ha_wrapper_service_name: haproxy
+  name: HAproxy HA Wrappers Step
+  when: step|int == 2
+- include_role:
+    name: tripleo_lvmfilter
+  name: Run lvmfilter role
+  when:
+  - step|int == 1
+- import_role:
+    name: tripleo-container-tag
+  name: MySQL tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-mariadb:16.2
+    container_image_latest: cluster.common.tag/openstack-mariadb:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: Mysql puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: galera-bundle
+      tripleo_ha_wrapper_puppet_config_volume: mysql
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: '["Mysql_datadir", "Mysql_user", "Mysql_database",
+        "Mysql_grant", "Mysql_plugin"].each |String $val| { noop_resource($val) };
+        include ::tripleo::profile::base::pacemaker; include ::tripleo::profile::pacemaker::database::mysql_bundle'
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: galera
+      tripleo_ha_wrapper_resource_state: Master
+      tripleo_ha_wrapper_service_name: mysql
+  name: MySQL HA Wrappers Step
+  when: step|int == 2
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-api healthcheck status
+    register: nova_api_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_api_healthcheck
+    until: nova_api_healthcheck_state.status.ExecMainPID != '0' and nova_api_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-api isn't working (healthcheck failed)
+    name: Fail if nova-api healthcheck report failed status
+    when: nova_api_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova api container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-conductor healthcheck status
+    register: nova_conductor_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_conductor_healthcheck
+    until: nova_conductor_healthcheck_state.status.ExecMainPID != '0' and nova_conductor_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-conductor isn't working (healthcheck failed)
+    name: Fail if nova-conductor healthcheck report failed status
+    when: nova_conductor_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova conductor container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-metadata healthcheck status
+    register: nova_metadata_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_metadata_healthcheck
+    until: nova_metadata_healthcheck_state.status.ExecMainPID != '0' and nova_metadata_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-metadata isn't working (healthcheck failed)
+    name: Fail if nova-metadata healthcheck report failed status
+    when: nova_metadata_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova metadata container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-scheduler healthcheck status
+    register: nova_scheduler_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_scheduler_healthcheck
+    until: nova_scheduler_healthcheck_state.status.ExecMainPID != '0' and nova_scheduler_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-scheduler isn't working (healthcheck failed)
+    name: Fail if nova-scheduler healthcheck report failed status
+    when: nova_scheduler_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova scheduler container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-vnc-proxy healthcheck status
+    register: nova_vnc_proxy_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_vnc_proxy_healthcheck
+    until: nova_vnc_proxy_healthcheck_state.status.ExecMainPID != '0' and nova_vnc_proxy_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-vnc-proxy isn't working (healthcheck failed)
+    name: Fail if nova-vnc-proxy healtcheck report failed status
+    when: nova_vnc_proxy_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova-vnc-proxy container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5
+- block:
+  - copy:
+      content: "#!/bin/sh\ntmpwatch --nodirs \\\n  -X \"/var/log/containers/*/*log\"\
+        \ \\\n  -X \"/var/log/containers/*/*/*log\" \\\n  -X \"/var/log/containers/*/*err\"\
+        \ \\\n  {{ LogrotatePurgeAfterDays|int +1 }}d \\\n  /var/log/containers/ 2>&1\
+        \ | logger -t container-tmpwatch\n"
+      dest: /usr/local/sbin/containers-tmpwatch
+      group: root
+      mode: 493
+      owner: root
+    name: Push script
+    vars:
+      LogrotatePurgeAfterDays: '14'
+  - cron:
+      job: /usr/local/sbin/containers-tmpwatch
+      name: Remove old logs
+      special_time: daily
+      user: root
+    name: Insert cronjob in root crontab
+  name: configure tmpwatch on the host
+  when: step|int == 2
+- import_role:
+    name: tripleo-container-tag
+  name: OVN DBS tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-ovn-northd:16.2
+    container_image_latest: cluster.common.tag/openstack-ovn-northd:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: Ovn dbs puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: ovn-dbs-bundle
+      tripleo_ha_wrapper_puppet_config_volume: ovn_dbs
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: include ::tripleo::profile::base::pacemaker;
+        include ::tripleo::profile::pacemaker::ovn_dbs_bundle
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ip,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: ovndb_servers
+      tripleo_ha_wrapper_resource_state: Slave Master
+      tripleo_ha_wrapper_service_name: ovn_dbs
+  name: OVNDbs HA Wrappers Step
+  when: step|int == 3
+- import_role:
+    name: tripleo-container-tag
+  name: RabbitMQ tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-rabbitmq:16.2
+    container_image_latest: cluster.common.tag/openstack-rabbitmq:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: Rabbitmq rpc puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: rabbitmq-bundle
+      tripleo_ha_wrapper_puppet_config_volume: rabbitmq
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: '["Rabbitmq_policy", "Rabbitmq_user"].each
+        |String $val| { noop_resource($val) }; include ::tripleo::profile::base::pacemaker;
+        include ::tripleo::profile::pacemaker::rabbitmq_bundle'
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ip,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: rabbitmq
+      tripleo_ha_wrapper_resource_state: Started
+      tripleo_ha_wrapper_service_name: oslo_messaging_rpc
+  name: RabbitMQ RPC HA Wrappers Step
+  when: step|int == 2
+- block:
+  - become: true
+    delay: 5
+    loop: '{{ lookup(''file'', tripleo_role_name + ''/docker_config.yaml'', errors=''ignore'')
+      | default(''{}'', True) | from_yaml | recursive_get_key_from_dict(key=''image'')
+      | unique }}'
+    loop_control:
+      loop_var: prefetch_image
+    name: Pre-fetch all the containers
+    podman_image:
+      force: true
+      name: '{{ prefetch_image }}'
+      validate_certs: false
+    retries: 5
+  when:
+  - (step|int) == 1
+- import_role:
+    name: tripleo-container-tag
+  name: Redis tag container image for pacemaker
+  vars:
+    container_image: registry.redhat.io/rhosp-rhel8/openstack-redis:16.2
+    container_image_latest: cluster.common.tag/openstack-redis:pcmklatest
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo_ha_wrapper
+    name: Redis puppet bundle
+    vars:
+      tripleo_ha_wrapper_bundle_name: redis-bundle
+      tripleo_ha_wrapper_puppet_config_volume: redis
+      tripleo_ha_wrapper_puppet_debug: false
+      tripleo_ha_wrapper_puppet_execute: include ::tripleo::profile::base::pacemaker;
+        include ::tripleo::profile::pacemaker::database::redis_bundle
+      tripleo_ha_wrapper_puppet_tags: pacemaker::resource::bundle,pacemaker::property,pacemaker::resource::ocf,pacemaker::constraint::order,pacemaker::constraint::colocation
+      tripleo_ha_wrapper_resource_name: redis
+      tripleo_ha_wrapper_resource_state: Slave Master
+      tripleo_ha_wrapper_service_name: redis
+  name: Redis HA Wrappers Step
+  when: step|int == 2
+- block:
+  - failed_when: rsyslog_config.rc == 2
+    name: Check if rsyslog exists
+    register: rsyslog_config
+    shell: systemctl list-unit-files --type=service | grep -q rsyslog
+  - block:
+    - copy:
+        content: '# Fix for https://bugs.launchpad.net/tripleo/+bug/1776180
+
+          local2.*                 /var/log/containers/swift/swift.log
+
+          &                        stop
+
+          '
+        dest: /etc/rsyslog.d/openstack-swift.conf
+      name: Forward logging to swift.log file
+      register: logconfig
+    - name: Restart rsyslogd service after logging conf change
+      service: name=rsyslog state=restarted
+      when:
+      - logconfig is changed
+    when:
+    - rsyslog_config is changed
+    - rsyslog_config.rc == 0
+  name: Configure rsyslog for swift-proxy
+  when: step|int == 1
+- become: true
+  failed_when:
+  - kolla_set_configs_result.rc is defined
+  - kolla_set_configs_result.rc not in [0, 125]
+  name: Run kolla_set_configs to copy ring files
+  register: kolla_set_configs_result
+  shell: '{{ container_cli }} exec -u root {{ item }} /usr/local/bin/kolla_set_configs '
+  when: step|int == 5
+  with_items:
+  - swift_proxy
+- block:
+  - failed_when: rsyslog_config.rc == 2
+    name: Check if rsyslog exists
+    register: rsyslog_config
+    shell: systemctl list-unit-files --type=service | grep -q rsyslog
+  - block:
+    - copy:
+        content: '# Fix for https://bugs.launchpad.net/tripleo/+bug/1776180
+
+          local2.*                 /var/log/containers/swift/swift.log
+
+          &                        stop
+
+          '
+        dest: /etc/rsyslog.d/openstack-swift.conf
+      name: Forward logging to swift.log file
+      register: logconfig
+    - name: Restart rsyslogd service after logging conf change
+      service: name=rsyslog state=restarted
+      when:
+      - logconfig is changed
+    when:
+    - rsyslog_config is changed
+    - rsyslog_config.rc == 0
+  name: Configure rsyslog for swift-storage
+  when: step|int == 1
+- become: true
+  failed_when:
+  - kolla_set_configs_result.rc is defined
+  - kolla_set_configs_result.rc not in [0, 125]
+  name: Run kolla_set_configs to copy ring files
+  register: kolla_set_configs_result
+  shell: '{{ container_cli }} exec -u root {{ item }} /usr/local/bin/kolla_set_configs'
+  when: step|int == 5
+  with_items:
+  - swift_account_auditor
+  - swift_account_reaper
+  - swift_account_replicator
+  - swift_account_server
+  - swift_container_auditor
+  - swift_container_replicator
+  - swift_container_server
+  - swift_container_updater
+  - swift_object_auditor
+  - swift_object_expirer
+  - swift_object_replicator
+  - swift_object_server
+  - swift_object_updater
+- block:
+  - copy:
+      content: '[Unit]
+
+        Description=Initialize iptables
+
+        Before=iptables.service
+
+        AssertPathExists=/etc/sysconfig/iptables
+
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/usr/sbin/iptables -t raw -nL
+
+        Environment=BOOTUP=serial
+
+        Environment=CONSOLETYPE=serial
+
+        StandardOutput=syslog
+
+        StandardError=syslog
+
+        [Install]
+
+        WantedBy=basic.target
+
+        '
+      dest: /etc/systemd/system/tripleo-iptables.service
+    name: create iptables service
+  - copy:
+      content: '[Unit]
+
+        Description=Initialize ip6tables
+
+        Before=ip6tables.service
+
+        AssertPathExists=/etc/sysconfig/ip6tables
+
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/usr/sbin/ip6tables -t raw -nL
+
+        Environment=BOOTUP=serial
+
+        Environment=CONSOLETYPE=serial
+
+        StandardOutput=syslog
+
+        StandardError=syslog
+
+        [Install]
+
+        WantedBy=basic.target
+
+        '
+      dest: /etc/systemd/system/tripleo-ip6tables.service
+    name: create ip6tables service
+  - name: enable tripleo-iptables service (and do a daemon-reload systemd)
+    systemd:
+      daemon_reload: true
+      enabled: true
+      name: tripleo-iptables.service
+  - name: enable tripleo-ip6tables service
+    systemd:
+      enabled: true
+      name: tripleo-ip6tables.service
+  when: step|int == 0

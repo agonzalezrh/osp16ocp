@@ -1,0 +1,8 @@
+parameter_defaults:
+  ComputeCount: 1
+  ControllerCount: 1  
+  OvercloudComputeFlavor: compute  
+  OvercloudControllerFlavor: control
+resource_registry:
+  OS::TripleO::Compute::Net::SoftwareConfig: ./net-config-static-bridge.yaml  
+  OS::TripleO::Controller::Net::SoftwareConfig: ./net-config-static-bridge.yaml

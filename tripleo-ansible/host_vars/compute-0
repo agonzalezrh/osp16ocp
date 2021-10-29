@@ -1,0 +1,15 @@
+pre_network_Compute:  [] 
+
+pre_deployments_Compute:  [] 
+
+post_deployments_Compute:  [] 
+
+# ansible_host_vars managed by TripleO Heat Templates in puppet/role.role.j2.yaml:
+ctlplane_subnet_cidr: '24'
+fqdn_canonical: compute-0.localdomain
+fqdn_ctlplane: compute-0.ctlplane.localdomain
+hostname_resolve_network: ctlplane
+network_cidrs: null
+ovn_chassis_mac_map:
+  datacentre: null
+

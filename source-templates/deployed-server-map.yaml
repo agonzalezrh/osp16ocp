@@ -1,0 +1,58 @@
+resource_registry:
+  OS::TripleO::DeployedServer::ControlPlanePort: ./deployed-server/deployed-neutron-port.yaml
+  OS::TripleO::Network::Ports::ControlPlaneVipPort: ./deployed-server/deployed-neutron-port.yaml
+  OS::TripleO::Network::Ports::NetVipMap: ./network/ports/net_vip_map_external.yaml
+  OS::TripleO::Network::Ports::RedisVipPort: ./network/ports/noop.yaml
+  OS::TripleO::Network::Ports::OVNDBsVipPort: ./network/ports/noop.yaml
+  OS::TripleO::Network::Ports::ExternalVipPort: ./network/ports/noop.yaml
+  OS::TripleO::Network::Ports::InternalApiVipPort: ./network/ports/noop.yaml
+  OS::TripleO::Network::Ports::StorageVipPort: ./network/ports/noop.yaml
+  OS::TripleO::Network::Ports::StorageMgmtVipPort: ./network/ports/noop.yaml
+  # for now set OVNMacAddressNetwork and OVNMacAddressPort to None, see https://github.com/openstack-k8s-operators/osp-director-operator/issues/254
+  OS::TripleO::OVNMacAddressNetwork: OS::Heat::None
+  OS::TripleO::OVNMacAddressPort: OS::Heat::None
+
+parameter_defaults:
+  DeployedServerPortMap:
+    compute-0-ctlplane:
+      fixed_ips:
+        - ip_address: 192.0.2.225
+      subnets:
+        - cidr: 192.0.2.0/24
+      network:
+        tags:
+          - 192.0.2.0/24
+    controller-0-ctlplane:
+      fixed_ips:
+        - ip_address: 192.0.2.222
+      subnets:
+        - cidr: 192.0.2.0/24
+      network:
+        tags:
+          - 192.0.2.0/24
+    controller-1-ctlplane:
+      fixed_ips:
+        - ip_address: 192.0.2.223
+      subnets:
+        - cidr: 192.0.2.0/24
+      network:
+        tags:
+          - 192.0.2.0/24
+    controller-2-ctlplane:
+      fixed_ips:
+        - ip_address: 192.0.2.224
+      subnets:
+        - cidr: 192.0.2.0/24
+      network:
+        tags:
+          - 192.0.2.0/24
+    control_virtual_ip:
+      fixed_ips:
+        - ip_address: 192.0.2.220
+      subnets:
+        - cidr: 192.0.2.0/24
+      network:
+        tags:
+          - 192.0.2.0/24
+  ControlPlaneIP: 192.0.2.220
+

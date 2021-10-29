@@ -1,0 +1,66 @@
+- block:
+  - changed_when: false
+    check_mode: false
+    command: openstack compute service list --service nova-compute --column ID --column
+      Host --format yaml
+    delegate_to: localhost
+    name: Get nova-compute service ID
+    register: nova_compute_service_result
+  - name: is additional Cell?
+    set_fact:
+      is_additional_cell: false
+  - check_mode: false
+    delegate_to: localhost
+    name: Set fact for nova_compute services
+    set_fact:
+      nova_compute_service: '{{ nova_compute_service_result.stdout | from_yaml | selectattr(''Host'',
+        ''match'', ansible_facts[''fqdn''] ~ ''.*'') | list }}'
+  - fail:
+      msg: Found multiple `{{ ansible_facts['fqdn'] }}`, which is unexpected. This
+        means that the FQDN of the selected device to disable is either wrong or is
+        sharing a name with another host, which is also wrong. Please correct this
+        issue before continuing. Nova service list return data can be found here ->
+        {{ nova_compute_service }}.
+    name: Check search output
+    when:
+    - (nova_compute_service | length) > 1
+  - block:
+    - check_mode: false
+      command: openstack compute service set {{ nova_compute_service[0].Host }} nova-compute
+        --disable
+      delegate_to: localhost
+      name: Disable nova-compute service
+      when:
+      - not is_additional_cell|bool
+    - become: true
+      name: Stop nova-compute healthcheck container
+      service:
+        enabled: false
+        name: tripleo_nova_compute_healthcheck
+        state: stopped
+    - become: true
+      name: Stop nova-compute container
+      service:
+        enabled: false
+        name: tripleo_nova_compute
+        state: stopped
+    - check_mode: false
+      command: openstack compute service delete {{ nova_compute_service[0].ID }}
+      delegate_to: localhost
+      name: Delete nova-compute service
+    name: Disable nova services
+    when:
+    - (nova_compute_service | length) == 1
+  environment:
+    OS_AUTH_TYPE: password
+    OS_AUTH_URL: http://:5000/v3
+    OS_IDENTITY_API_VERSION: 3
+    OS_PASSWORD: hh7rr2h8xkdvhjfqsd2pvzvl2
+    OS_PROJECT_DOMAIN_NAME: Default
+    OS_PROJECT_NAME: admin
+    OS_USERNAME: admin
+    OS_USER_DOMAIN_NAME: Default
+  tags: down
+  when:
+  - step|int == 1
+  - container_cli == 'podman'

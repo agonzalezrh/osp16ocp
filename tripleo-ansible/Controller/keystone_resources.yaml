@@ -1,0 +1,118 @@
+cinder:
+  users:
+    cinder:
+      password: wzn72r4zz2g6mkcnb2qnths9v
+      roles:
+      - admin
+      - service
+cinderv2:
+  endpoints:
+    admin: http://:8776/v2/%(tenant_id)s
+    internal: http://:8776/v2/%(tenant_id)s
+    public: http://:8776/v2/%(tenant_id)s
+  region: regionOne
+  service: volumev2
+  users:
+    cinderv2:
+      password: wzn72r4zz2g6mkcnb2qnths9v
+      roles:
+      - admin
+      - service
+cinderv3:
+  endpoints:
+    admin: http://:8776/v3/%(tenant_id)s
+    internal: http://:8776/v3/%(tenant_id)s
+    public: http://:8776/v3/%(tenant_id)s
+  region: regionOne
+  service: volumev3
+  users:
+    cinderv3:
+      password: wzn72r4zz2g6mkcnb2qnths9v
+      roles:
+      - admin
+      - service
+glance:
+  endpoints:
+    admin: http://:9292
+    internal: http://:9292
+    public: http://:9292
+  region: regionOne
+  service: image
+  users:
+    glance:
+      password: fzshwmlxxgjfbt96ltmhdv79m
+heat:
+  domains:
+  - heat_stack
+  endpoints:
+    admin: http://:8004/v1/%(tenant_id)s
+    internal: http://:8004/v1/%(tenant_id)s
+    public: http://:8004/v1/%(tenant_id)s
+  region: regionOne
+  roles:
+  - heat_stack_user
+  service: orchestration
+  users:
+    heat:
+      password: 7465fbr9mdgsh9zm6lpjs89nx
+    heat_stack_domain_admin:
+      domain: heat_stack
+      password: 42rh7c7klrwjx5bh7mjwhb98f
+      roles:
+      - admin
+heat-cfn:
+  endpoints:
+    admin: http://:8000/v1
+    internal: http://:8000/v1
+    public: http://:8000/v1
+  region: regionOne
+  service: cloudformation
+  users:
+    heat-cfn:
+      password: 7465fbr9mdgsh9zm6lpjs89nx
+neutron:
+  endpoints:
+    admin: http://:9696
+    internal: http://:9696
+    public: http://:9696
+  region: regionOne
+  service: network
+  users:
+    neutron:
+      password: 7g5922r6dh9zw27fbdx56hk9n
+nova:
+  endpoints:
+    admin: http://:8774/v2.1
+    internal: http://:8774/v2.1
+    public: http://:8774/v2.1
+  region: regionOne
+  service: compute
+  users:
+    nova:
+      password: ghjpv7zkz7dnp74hksd4wk65q
+      roles:
+      - admin
+      - service
+placement:
+  endpoints:
+    admin: http://:8778/placement
+    internal: http://:8778/placement
+    public: http://:8778/placement
+  region: regionOne
+  service: placement
+  users:
+    placement:
+      password: 79dwnbvctrlpzzj8zkmn5dggm
+swift:
+  endpoints:
+    admin: http://:8080
+    internal: http://:8080/v1/AUTH_%(tenant_id)s
+    public: http://:8080/v1/AUTH_%(tenant_id)s
+  region: regionOne
+  roles:
+  - swiftoperator
+  - ResellerAdmin
+  service: object-store
+  users:
+    swift:
+      password: fsfcsbpvv4ln2q48dlzn8zl5l
