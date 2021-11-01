@@ -1,8 +1,0 @@
-- include_tasks: Controller/update_tasks.yaml
-  when: tripleo_role_name == 'Controller'
-  tags:
-    - always
-- include_tasks: Compute/update_tasks.yaml
-  when: tripleo_role_name == 'Compute'
-  tags:
-    - always

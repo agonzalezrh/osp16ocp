@@ -1,3 +1,0 @@
-- name: Set boolean skip_package_update
-  set_fact:
-    skip_package_update: false
