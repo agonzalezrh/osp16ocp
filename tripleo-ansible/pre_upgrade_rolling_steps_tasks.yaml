@@ -1,0 +1,20 @@
+- include_tasks: Controller/pre_upgrade_rolling_tasks.yaml
+  when: tripleo_role_name == 'Controller'
+  tags:
+    - always
+- include_tasks: Compute/pre_upgrade_rolling_tasks.yaml
+  when: tripleo_role_name == 'Compute'
+  tags:
+    - always
+- include_tasks: BlockStorage/pre_upgrade_rolling_tasks.yaml
+  when: tripleo_role_name == 'BlockStorage'
+  tags:
+    - always
+- include_tasks: ObjectStorage/pre_upgrade_rolling_tasks.yaml
+  when: tripleo_role_name == 'ObjectStorage'
+  tags:
+    - always
+- include_tasks: CephStorage/pre_upgrade_rolling_tasks.yaml
+  when: tripleo_role_name == 'CephStorage'
+  tags:
+    - always

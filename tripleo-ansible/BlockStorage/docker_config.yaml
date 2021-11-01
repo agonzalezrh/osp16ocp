@@ -1,0 +1,100 @@
+step_3:
+  cinder_volume_init_logs:
+    command:
+    - /bin/bash
+    - -c
+    - chown -R cinder:cinder /var/log/cinder
+    image: registry.redhat.io/rhosp-rhel8/openstack-cinder-volume:16.2
+    net: none
+    privileged: false
+    start_order: 0
+    user: root
+    volumes:
+    - /var/log/containers/cinder:/var/log/cinder:z
+  iscsid:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-iscsid:16.2
+    net: host
+    privileged: true
+    restart: always
+    start_order: 2
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/iscsid.json:/var/lib/kolla/config_files/config.json:ro
+    - /dev/:/dev/
+    - /run/:/run/
+    - /sys:/sys
+    - /lib/modules:/lib/modules:ro
+    - /etc/iscsi:/var/lib/kolla/config_files/src-iscsid:ro
+    - /etc/target:/etc/target:z
+    - /var/lib/iscsi:/var/lib/iscsi:z
+step_4:
+  cinder_volume:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck 5672
+    image: registry.redhat.io/rhosp-rhel8/openstack-cinder-volume:16.2
+    ipc: host
+    net: host
+    privileged: true
+    restart: always
+    ulimit:
+    - nofile=131072
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/config-data/puppet-generated/cinder:/var/lib/kolla/config_files/src:ro
+    - /var/log/containers/cinder:/var/log/cinder:z
+    - /var/lib/kolla/config_files/cinder_volume.json:/var/lib/kolla/config_files/config.json:ro
+    - /etc/iscsi:/var/lib/kolla/config_files/src-iscsid:ro
+    - /etc/ceph:/var/lib/kolla/config_files/src-ceph:ro
+    - /lib/modules:/lib/modules:ro
+    - /dev/:/dev/
+    - /run/:/run/
+    - /sys:/sys
+    - /var/lib/cinder:/var/lib/cinder:z
+    - /var/lib/iscsi:/var/lib/iscsi:z
+    - /etc/target:/etc/target:z
+  logrotate_crond:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /usr/share/openstack-tripleo-common/healthcheck/cron
+    image: registry.redhat.io/rhosp-rhel8/openstack-cron:16.2
+    net: none
+    pid: host
+    privileged: true
+    restart: always
+    user: root
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/logrotate-crond.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/crond:/var/lib/kolla/config_files/src:ro
+    - /var/log/containers:/var/log/containers:z

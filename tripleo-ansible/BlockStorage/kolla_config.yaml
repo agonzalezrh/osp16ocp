@@ -1,0 +1,46 @@
+/var/lib/kolla/config_files/cinder_volume.json:
+  command: /usr/bin/cinder-volume --config-file /usr/share/cinder/cinder-dist.conf
+    --config-file /etc/cinder/cinder.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+  - dest: /etc/ceph/
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src-ceph/
+  - dest: /etc/iscsi/
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src-iscsid/*
+  - dest: /
+    merge: true
+    optional: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src-tls/*
+  permissions:
+  - owner: cinder:cinder
+    path: /var/log/cinder
+    recurse: true
+  - owner: cinder:cinder
+    path: /etc/ceph/ceph.client.openstack.keyring
+    perm: '0600'
+  - owner: cinder:cinder
+    path: /etc/pki/tls/certs/etcd.crt
+  - owner: cinder:cinder
+    path: /etc/pki/tls/private/etcd.key
+/var/lib/kolla/config_files/iscsid.json:
+  command: /usr/sbin/iscsid -f
+  config_files:
+  - dest: /etc/iscsi/
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src-iscsid/*
+/var/lib/kolla/config_files/logrotate-crond.json:
+  command: /usr/sbin/crond -s -n
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*

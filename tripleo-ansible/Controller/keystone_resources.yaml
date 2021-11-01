@@ -1,0 +1,118 @@
+cinder:
+  users:
+    cinder:
+      password: nktlx2pmm27btwjr96bq5plq9
+      roles:
+      - admin
+      - service
+cinderv2:
+  endpoints:
+    admin: http://172.17.0.220:8776/v2/%(tenant_id)s
+    internal: http://172.17.0.220:8776/v2/%(tenant_id)s
+    public: http://10.0.0.220:8776/v2/%(tenant_id)s
+  region: regionOne
+  service: volumev2
+  users:
+    cinderv2:
+      password: nktlx2pmm27btwjr96bq5plq9
+      roles:
+      - admin
+      - service
+cinderv3:
+  endpoints:
+    admin: http://172.17.0.220:8776/v3/%(tenant_id)s
+    internal: http://172.17.0.220:8776/v3/%(tenant_id)s
+    public: http://10.0.0.220:8776/v3/%(tenant_id)s
+  region: regionOne
+  service: volumev3
+  users:
+    cinderv3:
+      password: nktlx2pmm27btwjr96bq5plq9
+      roles:
+      - admin
+      - service
+glance:
+  endpoints:
+    admin: http://172.17.0.220:9292
+    internal: http://172.17.0.220:9292
+    public: http://10.0.0.220:9292
+  region: regionOne
+  service: image
+  users:
+    glance:
+      password: 8sslzm6crwk8bt54q82wjxjjm
+heat:
+  domains:
+  - heat_stack
+  endpoints:
+    admin: http://172.17.0.220:8004/v1/%(tenant_id)s
+    internal: http://172.17.0.220:8004/v1/%(tenant_id)s
+    public: http://10.0.0.220:8004/v1/%(tenant_id)s
+  region: regionOne
+  roles:
+  - heat_stack_user
+  service: orchestration
+  users:
+    heat:
+      password: q2tmkksmhmjxfr8w6qpxwvzdm
+    heat_stack_domain_admin:
+      domain: heat_stack
+      password: zb4xk9x9pcscg4mcxt9z9zwlm
+      roles:
+      - admin
+heat-cfn:
+  endpoints:
+    admin: http://172.17.0.220:8000/v1
+    internal: http://172.17.0.220:8000/v1
+    public: http://10.0.0.220:8000/v1
+  region: regionOne
+  service: cloudformation
+  users:
+    heat-cfn:
+      password: q2tmkksmhmjxfr8w6qpxwvzdm
+neutron:
+  endpoints:
+    admin: http://172.17.0.220:9696
+    internal: http://172.17.0.220:9696
+    public: http://10.0.0.220:9696
+  region: regionOne
+  service: network
+  users:
+    neutron:
+      password: 4bmtgrwlv57snhgvptww2bd8b
+nova:
+  endpoints:
+    admin: http://172.17.0.220:8774/v2.1
+    internal: http://172.17.0.220:8774/v2.1
+    public: http://10.0.0.220:8774/v2.1
+  region: regionOne
+  service: compute
+  users:
+    nova:
+      password: 4d8x96p5h8vfll547mfm9ph87
+      roles:
+      - admin
+      - service
+placement:
+  endpoints:
+    admin: http://172.17.0.220:8778/placement
+    internal: http://172.17.0.220:8778/placement
+    public: http://10.0.0.220:8778/placement
+  region: regionOne
+  service: placement
+  users:
+    placement:
+      password: zskxswzgqpn86fqttkf9w2mzw
+swift:
+  endpoints:
+    admin: http://172.18.0.220:8080
+    internal: http://172.18.0.220:8080/v1/AUTH_%(tenant_id)s
+    public: http://10.0.0.220:8080/v1/AUTH_%(tenant_id)s
+  region: regionOne
+  roles:
+  - swiftoperator
+  - ResellerAdmin
+  service: object-store
+  users:
+    swift:
+      password: t69wfrvqs5mpfgvjs5z92l6sx

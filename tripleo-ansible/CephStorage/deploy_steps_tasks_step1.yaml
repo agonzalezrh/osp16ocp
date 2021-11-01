@@ -1,0 +1,16 @@
+- block:
+  - become: true
+    delay: 5
+    loop: '{{ lookup(''file'', tripleo_role_name + ''/docker_config.yaml'', errors=''ignore'')
+      | default(''{}'', True) | from_yaml | recursive_get_key_from_dict(key=''image'')
+      | unique }}'
+    loop_control:
+      loop_var: prefetch_image
+    name: Pre-fetch all the containers
+    podman_image:
+      force: true
+      name: '{{ prefetch_image }}'
+      validate_certs: false
+    retries: 5
+  when:
+  - (step|int) == 1
