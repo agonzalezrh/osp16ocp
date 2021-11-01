@@ -1,0 +1,42 @@
+- block:
+  - become: true
+    delay: 5
+    loop: '{{ lookup(''file'', tripleo_role_name + ''/docker_config.yaml'', errors=''ignore'')
+      | default(''{}'', True) | from_yaml | recursive_get_key_from_dict(key=''image'')
+      | unique }}'
+    loop_control:
+      loop_var: prefetch_image
+    name: Pre-fetch all the containers
+    podman_image:
+      force: true
+      name: '{{ prefetch_image }}'
+      validate_certs: false
+    retries: 5
+  when:
+  - (step|int) == 1
+- block:
+  - failed_when: rsyslog_config.rc == 2
+    name: Check if rsyslog exists
+    register: rsyslog_config
+    shell: systemctl list-unit-files --type=service | grep -q rsyslog
+  - block:
+    - copy:
+        content: '# Fix for https://bugs.launchpad.net/tripleo/+bug/1776180
+
+          local2.*                 /var/log/containers/swift/swift.log
+
+          &                        stop
+
+          '
+        dest: /etc/rsyslog.d/openstack-swift.conf
+      name: Forward logging to swift.log file
+      register: logconfig
+    - name: Restart rsyslogd service after logging conf change
+      service: name=rsyslog state=restarted
+      when:
+      - logconfig is changed
+    when:
+    - rsyslog_config is changed
+    - rsyslog_config.rc == 0
+  name: Configure rsyslog for swift-storage
+  when: step|int == 1

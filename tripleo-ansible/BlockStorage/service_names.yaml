@@ -1,0 +1,16 @@
+- cinder_volume
+- boot_params_service
+- ca_certs
+- certmonger_user
+- iscsid
+- kernel
+- mysql_client
+- logrotate_crond
+- podman
+- snmp
+- sshd
+- chrony
+- timezone
+- tripleo_firewall
+- tripleo_packages
+- tuned

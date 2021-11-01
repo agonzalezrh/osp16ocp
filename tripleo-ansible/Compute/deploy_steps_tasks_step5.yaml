@@ -1,0 +1,23 @@
+- block:
+  - delay: 30
+    failed_when: false
+    name: Get nova-migration-target healthcheck status
+    register: nova_migration_target_healthcheck_state
+    retries: 10
+    systemd:
+      name: tripleo_nova_migration_target_healthcheck
+    until: nova_migration_target_healthcheck_state.status.ExecMainPID != '0' and nova_migration_target_healthcheck_state.status.ActiveState
+      in ['inactive', 'failed']
+  - fail:
+      msg: nova-migration-target isn't working (healtcheck failed)
+    name: Fail if nova-migration-target healthcheck report failed status
+    when: nova_migration_target_healthcheck_state.status.ExecMainStatus != '0'
+  name: validate nova migration target container state
+  tags:
+  - opendev-validation
+  - opendev-validation-nova
+  when:
+  - not (ansible_check_mode | bool)
+  - container_cli == 'podman'
+  - not container_healthcheck_disabled
+  - step|int == 5

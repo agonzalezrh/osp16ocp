@@ -1,0 +1,20 @@
+- include_tasks: Controller/update_tasks.yaml
+  when: tripleo_role_name == 'Controller'
+  tags:
+    - always
+- include_tasks: Compute/update_tasks.yaml
+  when: tripleo_role_name == 'Compute'
+  tags:
+    - always
+- include_tasks: BlockStorage/update_tasks.yaml
+  when: tripleo_role_name == 'BlockStorage'
+  tags:
+    - always
+- include_tasks: ObjectStorage/update_tasks.yaml
+  when: tripleo_role_name == 'ObjectStorage'
+  tags:
+    - always
+- include_tasks: CephStorage/update_tasks.yaml
+  when: tripleo_role_name == 'CephStorage'
+  tags:
+    - always

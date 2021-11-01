@@ -1,0 +1,16 @@
+- boot_params_service
+- ca_certs
+- certmonger_user
+- kernel
+- mysql_client
+- logrotate_crond
+- podman
+- snmp
+- sshd
+- swift_ringbuilder
+- swift_storage
+- chrony
+- timezone
+- tripleo_firewall
+- tripleo_packages
+- tuned

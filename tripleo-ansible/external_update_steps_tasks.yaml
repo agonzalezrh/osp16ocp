@@ -1,0 +1,18 @@
+- block:
+  - become: true
+    command: '{{ container_cli }} exec cinder_api cinder-manage db online_data_migrations'
+    delegate_to: '{{ groups[''cinder_api''][0] }}'
+    name: Online data migration for Cinder
+    tags:
+    - online_upgrade
+    - online_upgrade_cinder
+  when: step|int == 1
+- block:
+  - become: true
+    command: '{{ container_cli }} exec nova_conductor nova-manage db online_data_migrations'
+    delegate_to: '{{ groups[''nova_conductor''][0] }}'
+    name: Online data migration for Nova
+    tags:
+    - online_upgrade
+    - online_upgrade_nova
+  when: step|int == 1

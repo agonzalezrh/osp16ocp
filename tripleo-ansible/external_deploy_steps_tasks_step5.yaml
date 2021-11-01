@@ -1,0 +1,14 @@
+- args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+  environment:
+    OS_CLOUD: overcloud
+  name: Manage Cinder Volume Type
+  shell: "if ! openstack volume type show \"{{ default_volume_type }}\"; then\n  \
+    \  openstack volume type create --public \"{{ default_volume_type }}\"\nfi\n"
+  vars:
+    default_volume_type: tripleo
+  when:
+  - step|int == 5
+  - not ansible_check_mode|bool
