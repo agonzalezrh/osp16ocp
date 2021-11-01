@@ -1,0 +1,393 @@
+step_3:
+  swift_copy_rings:
+    command:
+    - /bin/bash
+    - -c
+    - cp -v -dR --preserve -t /etc/swift /swift_ringbuilder/etc/swift/*.gz /swift_ringbuilder/etc/swift/*.builder
+      /swift_ringbuilder/etc/swift/backups
+    detach: false
+    environment:
+      TRIPLEO_DEPLOY_IDENTIFIER: DeployIdentifier
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-proxy-server:16.2
+    net: none
+    user: root
+    volumes:
+    - /var/lib/config-data/puppet-generated/swift/etc/swift:/etc/swift:rw,z
+    - /var/lib/config-data/swift_ringbuilder:/swift_ringbuilder:ro
+  swift_setup_srv:
+    command:
+    - chown
+    - -R
+    - 'swift:'
+    - /srv/node
+    environment:
+      TRIPLEO_DEPLOY_IDENTIFIER: DeployIdentifier
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-account:16.2
+    net: none
+    start_order: 1
+    user: root
+    volumes:
+    - /srv/node:/srv/node:z
+step_4:
+  logrotate_crond:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /usr/share/openstack-tripleo-common/healthcheck/cron
+    image: registry.redhat.io/rhosp-rhel8/openstack-cron:16.2
+    net: none
+    pid: host
+    privileged: true
+    restart: always
+    user: root
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/logrotate-crond.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/crond:/var/lib/kolla/config_files/src:ro
+    - /var/log/containers:/var/log/containers:z
+  swift_account_auditor:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-account:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_account_auditor.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift:z
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_account_reaper:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-account:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_account_reaper.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift:z
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_account_replicator:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-account:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_account_replicator.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_account_server:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-account:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_account_server.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_container_auditor:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-container:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_container_auditor.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_container_replicator:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-container:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_container_replicator.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_container_server:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-container:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_container_server.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_container_updater:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-container:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_container_updater.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_object_auditor:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-object:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_object_auditor.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_object_expirer:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-proxy-server:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_object_expirer.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_object_replicator:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-object:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_object_replicator.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_object_server:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-object:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_object_server.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_object_updater:
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-object:16.2
+    net: host
+    restart: always
+    user: swift
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_object_updater.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/cache/swift:/var/cache/swift
+    - /var/log/containers/swift:/var/log/swift:z
+  swift_rsync:
+    cap_add:
+    - NET_BIND_SERVICE
+    environment:
+      KOLLA_CONFIG_STRATEGY: COPY_ALWAYS
+    healthcheck:
+      test: /openstack/healthcheck
+    image: registry.redhat.io/rhosp-rhel8/openstack-swift-object:16.2
+    net: host
+    privileged: false
+    restart: always
+    user: root
+    volumes:
+    - /etc/hosts:/etc/hosts:ro
+    - /etc/localtime:/etc/localtime:ro
+    - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+    - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+    - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+    - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+    - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+    - /dev/log:/dev/log
+    - /etc/puppet:/etc/puppet:ro
+    - /var/lib/kolla/config_files/swift_rsync.json:/var/lib/kolla/config_files/config.json:ro
+    - /var/lib/config-data/puppet-generated/swift:/var/lib/kolla/config_files/src:ro
+    - /srv/node:/srv/node
+    - /dev:/dev
+    - /var/log/containers/swift:/var/log/swift:z

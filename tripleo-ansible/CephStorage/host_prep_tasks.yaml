@@ -1,0 +1,108 @@
+- copy:
+    content: '#!/bin/bash
+
+      /var/lib/container-config-scripts/pacemaker_mutex_restart_bundle.sh --lock $*
+      2>&1 | logger -t certmonger'
+    dest: /usr/bin/certmonger-ha-resource-refresh.sh
+    mode: '0700'
+    setype: certmonger_unconfined_exec_t
+  name: create certificate rotation script for HA services
+- include_role:
+    name: tripleo-kernel
+- name: allow logrotate to read inside containers
+  seboolean:
+    name: logrotate_read_inside_containers
+    persistent: true
+    state: true
+- block:
+  - name: Set login facts
+    set_fact:
+      container_default_pids_limit: 4096
+      container_events_logger_mechanism: journald
+      container_registry_insecure_registries: []
+      container_registry_login: false
+      container_registry_logins: {}
+      container_registry_logins_json: {}
+  - name: Convert logins json to dict
+    set_fact:
+      container_registry_logins: '{{ container_registry_logins_json | from_json }}'
+    when:
+    - container_registry_logins_json is string
+    - container_registry_login | bool
+    - (container_registry_logins_json | length) > 0
+  - name: Set registry logins
+    set_fact:
+      container_registry_logins: '{{ container_registry_logins_json }}'
+    when:
+    - container_registry_logins_json is mapping
+    - container_registry_login | bool
+    - (container_registry_logins_json | length) > 0
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_install.yml
+    name: Run podman install
+    vars:
+      tripleo_container_default_pids_limit: '{{ container_default_pids_limit }}'
+      tripleo_container_events_logger_mechanism: '{{ container_events_logger_mechanism
+        }}'
+      tripleo_container_registry_insecure_registries: '{{ container_registry_insecure_registries
+        }}'
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_login.yml
+    name: Run podman login
+    vars:
+      tripleo_container_registry_login: '{{ container_registry_login | bool }}'
+      tripleo_container_registry_logins: '{{ container_registry_logins }}'
+  name: Install and configure Podman
+- copy:
+    content: 'This file makes paunch generate additional systemd
+
+      dependencies for containers that have special
+
+      start/stop ordering constraints. It ensures that
+
+      those constraints are enforced on reboot/shutdown.
+
+      '
+    dest: /etc/sysconfig/podman_drop_in
+  name: Configure paunch to generate systemd drop-in dependencies
+- become: true
+  failed_when: false
+  name: Check for NTP service
+  register: ntp_service_check
+  shell: systemctl is-active ntpd.service || systemctl is-enabled ntpd.service
+- name: Disable NTP before configuring Chrony
+  service:
+    enabled: false
+    name: ntpd
+    state: stopped
+  when:
+  - ntp_service_check.rc is defined
+  - ntp_service_check.rc == 0
+- include_role:
+    name: chrony
+  name: Install, Configure and Run Chrony
+- meta: flush_handlers
+  name: Ensure chrony has been restarted
+- command: chronyc makestep
+  name: Ensure system is NTP time synced
+- name: Set timezone fact
+  set_fact:
+    timezone: UTC
+- name: Set timezone to {{ timezone | default('UTC') }}
+  register: timezone_result
+  timezone:
+    name: '{{ timezone }}'
+- failed_when: false
+  name: Restart services
+  service:
+    name: '{{ item }}'
+    state: restarted
+  when:
+  - timezone_result.changed
+  with_items:
+  - rsyslog
+  - crond
+- include_role:
+    name: tuned

@@ -1,0 +1,486 @@
+- block:
+  - name: fix grub entries to have name start with GRUB_
+    replace:
+      path: /etc/default/grub
+      regexp: ^(TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS)(.*)
+      replace: GRUB_\1\2
+  - name: fix grub entries in append statement
+    replace:
+      path: /etc/default/grub
+      regexp: (.*){(TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS)}(.*)
+      replace: \1{GRUB_\2}\3
+  name: upgrade prepare for leapp to align kernel arg shortcommings in leapp
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 3
+  - upgrade_leapp_enabled
+- file:
+    path: /etc/cron.daily/containers-tmpwatch
+    state: absent
+  name: Ensure old cron.daily is absent
+  when: step|int == 1
+- block:
+  - args:
+      executable: /bin/bash
+      warn: false
+    changed_when: _selinux_config_data.rc == 2
+    failed_when: _selinux_config_data.rc not in [0,2]
+    name: Ensure /var/lib/config-data context
+    register: _selinux_config_data
+    shell: "set -o pipefail\nif [[ -e /var/lib/config-data ]]; then\n  chcon -R -t\
+      \ container_file_t /var/lib/config-data\n  exit 2\nfi"
+  - lineinfile:
+      dest: /etc/hosts
+      line: '{{ undercloud_hosts_entries | join('''') }}'
+      state: present
+    name: Make sure the Undercloud hostname is included in /etc/hosts
+    when:
+    - undercloud_hosts_entries is defined
+  - name: Set container_registry_insecure_registries fact.
+    set_fact:
+      container_registry_insecure_registries: []
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_install.yml
+    vars:
+      tripleo_container_registry_insecure_registries: '{{ container_registry_insecure_registries
+        }}'
+  name: Run podman install
+  when:
+  - step|int == 1
+- block:
+  - name: Check if pcs is present
+    register: pcs_stat
+    stat:
+      path: /usr/sbin/pcs
+  - name: Stop pacemaker cluster before stopping all docker containers
+    pacemaker_cluster: state=offline
+    when: pcs_stat.stat.exists
+  - command: /usr/sbin/pcs cluster destroy
+    name: Destroy pacemaker cluster
+    when: pcs_stat.stat.exists
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_docker_stop.yml
+    name: Stop all services by stopping all docker containers
+    tags:
+    - never
+    - system_upgrade
+    - system_upgrade_prepare
+  name: system_upgrade_prepare step 2
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 2
+- block:
+  - command: systemctl is-enabled --quiet snmpd
+    failed_when: false
+    name: Check if snmpd is enabled
+    register: snmpd_enabled_result
+  - name: Set fact snmpd_enabled
+    set_fact:
+      snmpd_enabled: '{{ snmpd_enabled_result.rc == 0 }}'
+  when: step|int == 0
+- name: Stop snmp service
+  service: name=snmpd state=stopped
+  when:
+  - step|int == 1
+  - snmpd_enabled|bool
+- block:
+  - args:
+      creates: /etc/sysconfig/ip6tables.n-o-upgrade
+    name: blank ipv6 rule before activating ipv6 firewall.
+    shell: cat /etc/sysconfig/ip6tables > /etc/sysconfig/ip6tables.n-o-upgrade; cat</dev/null>/etc/sysconfig/ip6tables
+  - name: cleanup unmanaged rules pushed by iptables-services
+    shell: "iptables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null\
+      \ && \\\n  iptables -D INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT\n\
+      iptables -C INPUT -p icmp -j ACCEPT &>/dev/null && \\\n  iptables -D INPUT -p\
+      \ icmp -j ACCEPT\niptables -C INPUT -i lo -j ACCEPT &>/dev/null && \\\n  iptables\
+      \ -D INPUT -i lo -j ACCEPT\niptables -C INPUT -p tcp -m state --state NEW -m\
+      \ tcp --dport 22 -j ACCEPT &>/dev/null && \\\n  iptables -D INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT\niptables -C INPUT -j REJECT\
+      \ --reject-with icmp-host-prohibited &>/dev/null && \\\n  iptables -D INPUT\
+      \ -j REJECT --reject-with icmp-host-prohibited\niptables -C FORWARD -j REJECT\
+      \ --reject-with icmp-host-prohibited &>/dev/null && \\\n  iptables -D FORWARD\
+      \ -j REJECT --reject-with icmp-host-prohibited\n\nsed -i '/^-A INPUT -m state\
+      \ --state RELATED,ESTABLISHED -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i\
+      \ '/^-A INPUT -p icmp -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i '/^-A INPUT\
+      \ -i lo -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i '/^-A INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT$/d' /etc/sysconfig/iptables\n\
+      sed -i '/^-A INPUT -j REJECT --reject-with icmp-host-prohibited$/d' /etc/sysconfig/iptables\n\
+      sed -i '/^-A FORWARD -j REJECT --reject-with icmp-host-prohibited$/d' /etc/sysconfig/iptables\n\
+      \nip6tables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null\
+      \ && \\\n  ip6tables -D INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT\n\
+      ip6tables -C INPUT -p ipv6-icmp -j ACCEPT &>/dev/null && \\\n  ip6tables -D\
+      \ INPUT -p ipv6-icmp -j ACCEPT\nip6tables -C INPUT -i lo -j ACCEPT &>/dev/null\
+      \ && \\\n  ip6tables -D INPUT -i lo -j ACCEPT\nip6tables -C INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT &>/dev/null && \\\n  ip6tables\
+      \ -D INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT\nip6tables\
+      \ -C INPUT -d fe80::/64 -p udp -m udp --dport 546 -m state --state NEW -j ACCEPT\
+      \ &>/dev/null && \\\n  ip6tables -D INPUT -d fe80::/64 -p udp -m udp --dport\
+      \ 546 -m state --state NEW -j ACCEPT\nip6tables -C INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited &>/dev/null && \\\n  ip6tables -D INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited\nip6tables -C FORWARD -j REJECT --reject-with icmp6-adm-prohibited\
+      \ &>/dev/null && \\\n  ip6tables -D FORWARD -j REJECT --reject-with icmp6-adm-prohibited\n\
+      \nsed -i '/^-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT$/d' /etc/sysconfig/ip6tables\n\
+      sed -i '/^-A INPUT -p ipv6-icmp -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed\
+      \ -i '/^-A INPUT -i lo -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A\
+      \ INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT$/d' /etc/sysconfig/ip6tables\n\
+      sed -i '/^-A INPUT -d fe80::\\/64 -p udp -m udp --dport 546 -m state --state\
+      \ NEW -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A FORWARD -j\
+      \ REJECT --reject-with icmp6-adm-prohibited$/d' /etc/sysconfig/ip6tables"
+  when: step|int == 3
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - always
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- name: Set leapp facts
+  set_fact:
+    upgrade_leapp_command_options: ''
+    upgrade_leapp_debug: true
+    upgrade_leapp_devel_skip: ''
+    upgrade_leapp_enabled: "{{ _upgradeLeappEnabled | bool and\n   ansible_facts['distribution']\
+      \ == 'RedHat' and\n   ansible_facts['distribution_major_version'] is version('7',\
+      \ '==') }}"
+    upgrade_leapp_post_reboot_delay: 120
+    upgrade_leapp_reboot_timeout: 3600
+  tags:
+  - always
+  vars:
+    _upgradeLeappEnabled: false
+- block:
+  - ignore_errors: true
+    name: Hack around broken ceph-common rpm removing /etc/ceph /var/lib/ceph
+    shell: 'rpm -e --nodeps --noscripts ceph-common
+
+      '
+  - name: remove all OpenStack packages
+    shell: yum -y remove *el7ost* galera* xinetd* haproxy* httpd kernel-devel mysql*
+      pacemaker* python-jsonpointer qemu-kvm-common-rhev qemu-img-rhev rabbit* redis*
+      -- -*openvswitch* -python-docker -python-PyMySQL -python-pysocks -python2-asn1crypto
+      -python2-babel -python2-cffi -python2-cryptography -python2-dateutil -python2-idna
+      -python2-ipaddress -python2-jinja2 -python2-jsonpatch -python2-markupsafe -python2-pyOpenSSL
+      -python2-requests -python2-six -python2-urllib3 -python2-chardet
+  - name: Run LeappRepoInitCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - name: Check if system was booted via EFI
+    register: efi
+    stat:
+      path: /sys/firmware/efi
+  - failed_when: false
+    name: Check if efi partition is present in /etc/fstab
+    register: efi_fstab
+    shell: 'grep efi /etc/fstab
+
+      '
+  - failed_when: false
+    name: Find out the UUID of UEFI device
+    register: efi_dev
+    shell: 'blkid -s UUID -o value "$(blkid -t TYPE=vfat | grep -i efi | cut -d '':''
+      -f1)"
+
+      '
+  - failed_when: false
+    name: Check if red is in efibootmgr
+    register: efi_broken
+    shell: 'efibootmgr | grep "red$"
+
+      '
+  - block:
+    - copy:
+        dest: /tmp/workaround_1925078_redhat/
+        remote_src: true
+        src: /boot/efi/EFI/redhat/
+      name: Copy /boot/efi/EFI/redhat to /tmp
+    - lineinfile:
+        dest: /etc/fstab
+        line: UUID={{ efi_dev.stdout }} /boot/efi vfat umask=0077 0 1
+      name: Insert /etc/fstab record
+    - command: mount /boot/efi
+      name: Mount the /boot/efi
+    - copy:
+        dest: /boot/efi/EFI/redhat/
+        remote_src: true
+        src: /tmp/workaround_1925078_redhat/
+      name: Copy /tmp/redhat to /boot/efi/EFI/redhat
+    - name: Create boot record
+      shell: 'DEVICE_PATH="$(blkid -t TYPE=vfat | grep -i efi | cut -d '':'' -f1)"
+
+        DEVICE="$(lsblk -no pkname $DEVICE_PATH)"
+
+        PARTITION="$(echo $DEVICE_PATH | awk ''{print $NF}'' FS=/$DEVICE)"
+
+        efibootmgr -c -L ''Red Hat Enterprise Linux'' -d $(echo $DEVICE_PATH | sed
+        s/$PARTITION\$//) -p $PARTITION -l ''\EFI\redhat\shimx64.efi''
+
+        '
+    - command: grub2-mkconfig -o /boot/efi/EFI/redhat/grub.cfg
+      name: Create grub config file
+    - command: rmmod btrfs
+      failed_when: false
+      name: Remove btrfs module in case fuse just loaded it
+    - name: Set workaround_1925078_fired
+      set_fact:
+        workaround_1925078_fired: true
+    when:
+    - efi_fstab.rc is defined
+    - efi_dev.rc is defined
+    - efi_broken.rc is defined
+    - efi.stat.exists|bool
+    - efi_fstab.rc == 1
+    - efi_dev.rc == 0
+    - efi_broken.rc == 0
+  - name: install leapp
+    package:
+      name: leapp
+      state: latest
+  - delegate_to: undercloud
+    find:
+      paths: /etc/leapp/files
+      patterns: '*'
+    name: Retrieve files in /etc/leapp/files
+    register: uc_leapp_files
+  - delegate_to: undercloud
+    fetch:
+      dest: '{{ playbook_dir }}'
+      src: '{{ item.path }}'
+    loop: '{{ uc_leapp_files.files }}'
+    name: Fetch the Leapp data from undercloud
+  - copy:
+      dest: '{{ item.path }}'
+      src: '{{ playbook_dir }}/{{ inventory_hostname }}/{{ item.path }}'
+    loop: '{{ uc_leapp_files.files }}'
+    name: Copy the Leapp data from undercloud
+  - name: Run LeappInitCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - file:
+      path: /etc/modules-load.d/nf_conntrack_proto_sctp.conf
+      state: absent
+    name: Remove obsolete nf_conntrack_proto_sctp from /etc/modules-load.d/
+  - lineinfile:
+      line: '{{ item }}'
+      path: /etc/leapp/transaction/to_remove
+    loop: '{{ pkg_to_remove }}'
+    name: add packages into Leapp's to_remove file
+    vars:
+      pkg_to_remove: []
+  - lineinfile:
+      line: '{{ item }}'
+      path: /etc/leapp/transaction/to_install
+    loop: '{{ pkg_to_install }}'
+    name: add packages into Leapp's to_install file
+    vars:
+      pkg_to_install: []
+  - name: check sshd_config file
+    register: sshd_config_result
+    stat:
+      path: /etc/ssh/sshd_config
+  - lineinfile:
+      line: PermitRootLogin without-password
+      path: /etc/ssh/sshd_config
+      regexp: ^(# *)?PermitRootLogin
+    name: add PermitRootLogin option for leapp
+  name: system_upgrade_prepare step 3
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 3
+  - upgrade_leapp_enabled
+- block:
+  - ignore_errors: true
+    mount: path=/var/lib/glance/images state=absent
+    name: unmount and remove nfs glance entry
+  - ignore_errors: true
+    mount: path="{{glance_node_staging_uri[7:]}}" state=absent
+    name: unmount and remove nfs glance staging entry
+    vars:
+      glance_node_staging_uri: file:///var/lib/glance/staging
+  - ignore_errors: true
+    mount: path=/var/lib/nova/instances state=absent
+    name: unmount and remove nfs nova entry
+  - lineinfile:
+      path: /usr/share/leapp-repository/repositories/system_upgrade/el7toel8/actors/kernel/checkkerneldrivers/files/removed_drivers.txt
+      regexp: '{{ item }}'
+      state: absent
+    loop: '{{ modules_to_unload }}'
+    name: Remove kernel drivers from Leapp removed_drivers.txt before running Leapp
+    vars:
+      modules_to_unload:
+      - floppy
+      - pata_acpi
+  - name: set leapp options
+    shell: 'leapp answer --section remove_pam_pkcs11_module_check.confirm=True --add
+
+      '
+  - name: run leapp upgrade (download packages)
+    shell: '{% if upgrade_leapp_devel_skip|default(false) %}{{ upgrade_leapp_devel_skip
+      }}{% endif %} leapp upgrade {% if upgrade_leapp_debug|default(true) %}--debug{%
+      endif %} {% if upgrade_leapp_command_options|default(false) %}{{ upgrade_leapp_command_options
+      }}{% endif %}
+
+      '
+  name: system_upgrade_prepare step 4
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 4
+  - upgrade_leapp_enabled
+- block:
+  - block:
+    - name: null
+      shell: 'NEXT_BOOT="$(efibootmgr -v | grep \\redhat | awk -F''[ t*]'' ''{print
+        $2}'')"
+
+        efibootmgr -n $NEXT_BOOT
+
+        '
+    - name: Stat /boot/grub2/grubenv
+      register: grubenv
+      stat:
+        path: /boot/grub2/grubenv
+    - copy:
+        dest: /boot/efi/EFI/redhat/grubenv
+        remote_src: true
+        src: /boot/grub2/grubenv
+      name: Copy /boot/grub2/grubenv to /boot/efi/EFI/redhat/grubenv
+      when: grubenv.stat.islnk is defined and grubenv.stat.islnk == False
+    name: Reset boot order if WA#1925078 fired and fix grubenv
+    when:
+    - workaround_1925078_fired is defined
+    - workaround_1925078_fired|bool
+  - name: reboot to perform the upgrade
+    reboot:
+      post_reboot_delay: '{{ upgrade_leapp_post_reboot_delay }}'
+      reboot_timeout: '{{upgrade_leapp_reboot_timeout}}'
+      test_command: systemctl is-system-running | grep -e running -e degraded
+  - name: Set the python to python3
+    shell: alternatives --set python /usr/bin/python3
+    vars:
+      ansible_python_interpreter: /usr/bin/python3
+  name: system_upgrade_run step 4
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_run
+  - system_upgrade_reboot
+  when:
+  - step|int == 4
+  - upgrade_leapp_enabled
+- block:
+  - name: Run UpgradeInitCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - name: Run UpgradeInitCommonCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - dnf:
+      name: '@{{ item.module }}:{{ item.stream }}/{{ item.profile|default(''common'')
+        }}'
+      state: present
+    loop: '{{ dnf_module_list|list }}'
+    name: Ensure DNF modules have the right stream
+    vars:
+      dnf_module_list: []
+    when:
+    - ansible_facts['distribution_major_version'] is version('8', '>=')
+    - dnf_module_list|length > 0
+  - delay: 10
+    name: Ensure EL modules are in proper state
+    register: _dnf_distro_sync
+    retries: 5
+    shell: dnf -y distro-sync
+    until: _dnf_distro_sync is success
+    when: ansible_facts['distribution_major_version'] == '8'
+  - name: Clean up Python 2 packages
+    package:
+      name: python2-*
+      state: absent
+    when: ansible_facts['distribution_major_version'] == '8'
+  - name: Ensure TripleO prerequisite packages are installed
+    package:
+      name:
+      - jq
+      - lvm2
+      - net-snmp
+      - openstack-selinux
+      - os-net-config
+      - puppet-tripleo
+      - python3-heat-agent*
+      - rsync
+      state: present
+    when: ansible_facts['distribution_major_version'] is version('8', '==')
+  name: Package and repo update tasks
+  when: step|int == 0
+- name: Special treatment for OpenvSwitch
+  register: ovs_upgrade
+  tripleo_ovs_upgrade: null
+  when:
+  - step|int == 2
+- name: Always ensure the openvswitch service is enabled and running after upgrades
+  service:
+    enabled: true
+    name: openvswitch
+    state: started
+  when:
+  - step|int == 2
+  - ovs_upgrade.changed|bool
+- name: Install libibverbs (https://bugs.launchpad.net/tripleo/+bug/1817743)
+  package:
+    name: libibverbs
+    state: installed
+  when: step|int == 2
+- name: Check for os-net-config upgrade
+  register: os_net_config_need_upgrade
+  shell: yum check-upgrade | awk '/os-net-config/{print}'
+  when: step|int == 3
+- failed_when: false
+  name: Check that os-net-config has configuration
+  register: os_net_config_has_config
+  shell: test -s /etc/os-net-config/config.json
+  when: step|int == 3
+- block:
+  - name: Upgrade os-net-config
+    package: name=os-net-config state=latest
+  - changed_when: os_net_config_upgrade.rc == 2
+    command: os-net-config --no-activate -c /etc/os-net-config/config.json -v --detailed-exit-codes
+    failed_when: os_net_config_upgrade.rc not in [0,2]
+    name: take new os-net-config parameters into account now
+    register: os_net_config_upgrade
+  when:
+  - step|int == 3
+  - os_net_config_need_upgrade.stdout
+  - os_net_config_has_config.rc == 0
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false
+- name: Update all packages
+  when:
+  - step|int == 3
+  - not skip_package_update|bool
+  yum:
+    exclude: ansible
+    name: '*'
+    state: latest

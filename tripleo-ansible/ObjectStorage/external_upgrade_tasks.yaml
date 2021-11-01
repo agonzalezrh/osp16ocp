@@ -1,0 +1,52 @@
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop logrotate container
+    vars:
+      tripleo_containers_to_stop:
+      - logrotate_crond
+      tripleo_delegate_to: '{{ groups[''logrotate_crond''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop swift-ringbuilder container
+    vars:
+      tripleo_containers_to_stop:
+      - swift-ringbuilder
+      tripleo_delegate_to: '{{ groups[''swift_ringbuilder''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop swift-storage container
+    vars:
+      tripleo_containers_to_stop:
+      - swift-storage
+      tripleo_delegate_to: '{{ groups[''swift_storage''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - include_role:
+      name: tripleo-persist
+      tasks_from: cleanup.yml
+    name: cleanup tripleo_persist
+  name: Clean up upgrade artifacts
+  tags:
+  - never
+  - system_upgrade_cleanup
+  when: step|int == 1

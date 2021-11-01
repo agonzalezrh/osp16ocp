@@ -1,0 +1,7 @@
+- include_role:
+    name: tripleo-podman
+    tasks_from: tripleo_podman_purge.yml
+  name: Purge Podman
+  when:
+  - (step | int) == 3
+  - container_cli == 'podman'

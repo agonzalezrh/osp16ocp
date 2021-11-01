@@ -1,0 +1,222 @@
+- file:
+    mode: '{{ item.mode|default(omit) }}'
+    path: '{{ item.path }}'
+    setype: '{{ item.setype }}'
+    state: directory
+  name: create persistent directories
+  with_items:
+  - mode: '0750'
+    path: /var/log/containers/cinder
+    setype: svirt_sandbox_file_t
+  - path: /var/lib/cinder
+    setype: svirt_sandbox_file_t
+- file:
+    path: /etc/ceph
+    state: directory
+  name: ensure ceph configurations exist
+- name: cinder_enable_iscsi_backend fact
+  set_fact:
+    cinder_enable_iscsi_backend: true
+- block:
+  - name: ensure LVM rpm dependencies are installed
+    package:
+      name: lvm2
+      state: latest
+  - args:
+      creates: /var/lib/cinder/cinder-volumes
+    command: dd if=/dev/zero of=/var/lib/cinder/cinder-volumes bs=1 count=0 seek=10280M
+    name: cinder create LVM volume group dd
+  - args:
+      executable: /bin/bash
+    changed_when: _loopback_device.rc == 2
+    failed_when: _loopback_device.rc not in [0,2]
+    name: Get or create LVM loopback device
+    register: _loopback_device
+    shell: "exit_code=0\nexisting_device=$(losetup -j /var/lib/cinder/cinder-volumes\
+      \ -l -O NAME | tail -n-1)\nif [[ -z \"${existing_device}\" ]]; then\n    losetup\
+      \ -f /var/lib/cinder/cinder-volumes --show\n    exit_code=2\nelse\n    echo\
+      \ ${existing_device%$'\\n'*}\nfi\nexit ${exit_code}"
+  - lvg:
+      pvs: '{{ _loopback_device.stdout }}'
+      state: present
+      vg: cinder-volumes
+    name: Create LVM volume group
+    when:
+    - not (ansible_check_mode | bool)
+  - copy:
+      content: '[Unit]
+
+        Description=Cinder LVM losetup
+
+        DefaultDependencies=no
+
+        Conflicts=umount.target
+
+        Requires=lvm2-monitor.service systemd-udev-settle.service
+
+        Before=local-fs.target umount.target
+
+        After=var.mount lvm2-monitor.service systemd-udev-settle.service
+
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/sbin/losetup {{ _loopback_device.stdout }} /var/lib/cinder/cinder-volumes
+
+        ExecStop=/sbin/losetup -d {{ _loopback_device.stdout }}
+
+        RemainAfterExit=yes
+
+
+        [Install]
+
+        WantedBy=local-fs-pre.target
+
+        '
+      dest: /etc/systemd/system/cinder-lvm-losetup.service
+    name: cinder create service to run losetup for LVM on startup
+    when:
+    - not (ansible_check_mode | bool)
+  - name: cinder enable the LVM losetup service
+    systemd:
+      daemon_reload: true
+      enabled: true
+      name: cinder-lvm-losetup
+  when: cinder_enable_iscsi_backend|bool
+- copy:
+    content: '#!/bin/bash
+
+      /var/lib/container-config-scripts/pacemaker_mutex_restart_bundle.sh --lock $*
+      2>&1 | logger -t certmonger'
+    dest: /usr/bin/certmonger-ha-resource-refresh.sh
+    mode: '0700'
+    setype: certmonger_unconfined_exec_t
+  name: create certificate rotation script for HA services
+- file:
+    path: '{{ item.path }}'
+    setype: '{{ item.setype }}'
+    state: directory
+  name: create persistent directories
+  with_items:
+  - path: /etc/iscsi
+    setype: svirt_sandbox_file_t
+  - path: /etc/target
+    setype: svirt_sandbox_file_t
+  - path: /var/lib/iscsi
+    setype: svirt_sandbox_file_t
+- name: stat /lib/systemd/system/iscsid.socket
+  register: stat_iscsid_socket
+  stat: path=/lib/systemd/system/iscsid.socket
+- name: Stop and disable iscsid.socket service
+  service: name=iscsid.socket state=stopped enabled=no
+  when: stat_iscsid_socket.stat.exists
+- command: systemctl is-enabled --quiet iscsi.service
+  failed_when: false
+  name: Check if iscsi.service is enabled
+  register: iscsi_service_enabled_result
+- name: Stop iscsi.service
+  service: name=iscsi.service state=stopped enabled=no
+  when:
+  - iscsi_service_enabled_result is changed
+  - iscsi_service_enabled_result.rc == 0
+- include_role:
+    name: tripleo-kernel
+- name: allow logrotate to read inside containers
+  seboolean:
+    name: logrotate_read_inside_containers
+    persistent: true
+    state: true
+- block:
+  - name: Set login facts
+    set_fact:
+      container_default_pids_limit: 4096
+      container_events_logger_mechanism: journald
+      container_registry_insecure_registries: []
+      container_registry_login: false
+      container_registry_logins: {}
+      container_registry_logins_json: {}
+  - name: Convert logins json to dict
+    set_fact:
+      container_registry_logins: '{{ container_registry_logins_json | from_json }}'
+    when:
+    - container_registry_logins_json is string
+    - container_registry_login | bool
+    - (container_registry_logins_json | length) > 0
+  - name: Set registry logins
+    set_fact:
+      container_registry_logins: '{{ container_registry_logins_json }}'
+    when:
+    - container_registry_logins_json is mapping
+    - container_registry_login | bool
+    - (container_registry_logins_json | length) > 0
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_install.yml
+    name: Run podman install
+    vars:
+      tripleo_container_default_pids_limit: '{{ container_default_pids_limit }}'
+      tripleo_container_events_logger_mechanism: '{{ container_events_logger_mechanism
+        }}'
+      tripleo_container_registry_insecure_registries: '{{ container_registry_insecure_registries
+        }}'
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_login.yml
+    name: Run podman login
+    vars:
+      tripleo_container_registry_login: '{{ container_registry_login | bool }}'
+      tripleo_container_registry_logins: '{{ container_registry_logins }}'
+  name: Install and configure Podman
+- copy:
+    content: 'This file makes paunch generate additional systemd
+
+      dependencies for containers that have special
+
+      start/stop ordering constraints. It ensures that
+
+      those constraints are enforced on reboot/shutdown.
+
+      '
+    dest: /etc/sysconfig/podman_drop_in
+  name: Configure paunch to generate systemd drop-in dependencies
+- become: true
+  failed_when: false
+  name: Check for NTP service
+  register: ntp_service_check
+  shell: systemctl is-active ntpd.service || systemctl is-enabled ntpd.service
+- name: Disable NTP before configuring Chrony
+  service:
+    enabled: false
+    name: ntpd
+    state: stopped
+  when:
+  - ntp_service_check.rc is defined
+  - ntp_service_check.rc == 0
+- include_role:
+    name: chrony
+  name: Install, Configure and Run Chrony
+- meta: flush_handlers
+  name: Ensure chrony has been restarted
+- command: chronyc makestep
+  name: Ensure system is NTP time synced
+- name: Set timezone fact
+  set_fact:
+    timezone: UTC
+- name: Set timezone to {{ timezone | default('UTC') }}
+  register: timezone_result
+  timezone:
+    name: '{{ timezone }}'
+- failed_when: false
+  name: Restart services
+  service:
+    name: '{{ item }}'
+    state: restarted
+  when:
+  - timezone_result.changed
+  with_items:
+  - rsyslog
+  - crond
+- include_role:
+    name: tuned

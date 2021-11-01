@@ -1,0 +1,100 @@
+certmonger_ca: IPA
+rsync::server::pid_file: UNSET
+snmp::agentaddress:
+- udp:161
+- udp6:[::1]:161
+snmp::snmpd_options: -LS0-5d
+swift::objectexpirer::cache_tls_enabled: false
+swift::storage::all::account_pipeline:
+- healthcheck
+- recon
+- account-server
+swift::storage::all::container_pipeline:
+- healthcheck
+- recon
+- container-server
+swift::storage::all::incoming_chmod: Du=rwx,g=rx,o=rx,Fu=rw,g=r,o=r
+swift::storage::all::mount_check: false
+swift::storage::all::object_pipeline:
+- healthcheck
+- recon
+- object-server
+swift::storage::all::outgoing_chmod: Du=rwx,g=rx,o=rx,Fu=rw,g=r,o=r
+swift::storage::all::storage_local_net_ip: '%{hiera(''storage_mgmt'')}'
+swift::storage::disks::args: {}
+swift::swift_hash_path_suffix: xl5rlgkzqtl4vnhznpxwbvsbq
+tripleo::chrony::firewall_rules:
+  105 ntp:
+    dport: 123
+    proto: udp
+tripleo::firewall::manage_firewall: true
+tripleo::firewall::purge_firewall_rules: false
+tripleo::packages::enable_install: true
+tripleo::profile::base::database::mysql::client::enable_ssl: false
+tripleo::profile::base::database::mysql::client::mysql_client_bind_address: '%{hiera(''internal_api'')}'
+tripleo::profile::base::database::mysql::client::ssl_ca: /etc/ipa/ca.crt
+tripleo::profile::base::logging::logrotate::dateext: false
+tripleo::profile::base::logging::logrotate::maxsize: 10M
+tripleo::profile::base::logging::logrotate::purge_after_days: '14'
+tripleo::profile::base::logging::logrotate::rotate: '14'
+tripleo::profile::base::logging::logrotate::rotation: daily
+tripleo::profile::base::snmp::snmpd_password: k5njxv4lw7pcxhsd55bq4wzs
+tripleo::profile::base::snmp::snmpd_user: ro_snmp_user
+tripleo::profile::base::sshd::bannertext: ''
+tripleo::profile::base::sshd::motd: ''
+tripleo::profile::base::sshd::options:
+  AcceptEnv:
+  - LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+  - LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+  - LC_IDENTIFICATION LC_ALL LANGUAGE
+  - XMODIFIERS
+  AuthorizedKeysFile: .ssh/authorized_keys
+  ChallengeResponseAuthentication: 'no'
+  GSSAPIAuthentication: 'yes'
+  GSSAPICleanupCredentials: 'no'
+  HostKey:
+  - /etc/ssh/ssh_host_rsa_key
+  - /etc/ssh/ssh_host_ecdsa_key
+  - /etc/ssh/ssh_host_ed25519_key
+  Subsystem: sftp  /usr/libexec/openssh/sftp-server
+  SyslogFacility: AUTHPRIV
+  UseDNS: 'no'
+  UsePAM: 'yes'
+  UsePrivilegeSeparation: sandbox
+  X11Forwarding: 'yes'
+tripleo::profile::base::sshd::password_authentication: 'no'
+tripleo::profile::base::swift::ringbuilder::build_ring: true
+tripleo::profile::base::swift::ringbuilder::min_part_hours: 1
+tripleo::profile::base::swift::ringbuilder::part_power: 10
+tripleo::profile::base::swift::ringbuilder::raw_disk_prefix: r1z1-
+tripleo::profile::base::swift::ringbuilder::raw_disks:
+- :%PORT%/d1
+tripleo::profile::base::swift::ringbuilder::replicas: 3
+tripleo::profile::base::swift::ringbuilder::skip_consistency_check: true
+tripleo::profile::base::swift::ringbuilder::swift_ring_get_tempurl: ''
+tripleo::profile::base::swift::ringbuilder::swift_ring_put_tempurl: ''
+tripleo::profile::base::swift::storage::use_local_dir: true
+tripleo::snmp::firewall_rules:
+  124 snmp 192.0.2.0/24:
+    dport: 161
+    proto: udp
+    source: 192.0.2.0/24
+tripleo::sshd::firewall_rules:
+  003 accept ssh from all:
+    dport: 22
+    extras:
+      ensure: absent
+    proto: tcp
+tripleo::swift_storage::firewall_rules:
+  123 swift storage:
+    dport:
+    - 873
+    - 6000
+    - 6001
+    - 6002
+tripleo::tripleo_firewall::firewall_rules:
+  003 accept ssh from ctlplane subnet 192.0.2.0/24:
+    dport: 22
+    proto: tcp
+    source: 192.0.2.0/24
+tripleo::trusted_cas::ca_map: {}
