@@ -1,0 +1,49 @@
+# Environment file for pre-assigned IPs
+resource_registry:
+  OS::TripleO::Compute::Ports::ExternalPort: ./network/ports/external_from_pool.yaml
+  OS::TripleO::Compute::Ports::InternalApiPort: ./network/ports/internal_api_from_pool.yaml
+  OS::TripleO::Compute::Ports::StoragePort: ./network/ports/storage_from_pool.yaml
+  OS::TripleO::Compute::Ports::TenantPort: ./network/ports/tenant_from_pool.yaml
+  OS::TripleO::ControlPlane::Ports::ExternalPort: ./network/ports/external_from_pool.yaml
+  OS::TripleO::ControlPlane::Ports::InternalApiPort: ./network/ports/internal_api_from_pool.yaml
+  OS::TripleO::ControlPlane::Ports::StoragePort: ./network/ports/storage_from_pool.yaml
+  OS::TripleO::ControlPlane::Ports::StorageMgmtPort: ./network/ports/storage_mgmt_from_pool.yaml
+  OS::TripleO::ControlPlane::Ports::TenantPort: ./network/ports/tenant_from_pool.yaml
+  OS::TripleO::Controller::Ports::ExternalPort: ./network/ports/external_from_pool.yaml
+  OS::TripleO::Controller::Ports::InternalApiPort: ./network/ports/internal_api_from_pool.yaml
+  OS::TripleO::Controller::Ports::StoragePort: ./network/ports/storage_from_pool.yaml
+  OS::TripleO::Controller::Ports::StorageMgmtPort: ./network/ports/storage_mgmt_from_pool.yaml
+  OS::TripleO::Controller::Ports::TenantPort: ./network/ports/tenant_from_pool.yaml
+
+parameter_defaults:
+  ComputeIPs:
+    external:
+    - 10.0.0.225
+    internal_api:
+    - 172.17.0.225
+    storage:
+    - 172.18.0.224
+    tenant:
+    - 172.16.0.224
+  ControllerIPs:
+    external:
+    - 10.0.0.222
+    - 10.0.0.223
+    - 10.0.0.224
+    internal_api:
+    - 172.17.0.222
+    - 172.17.0.223
+    - 172.17.0.224
+    storage:
+    - 172.18.0.221
+    - 172.18.0.222
+    - 172.18.0.223
+    storage_mgmt:
+    - 172.19.0.221
+    - 172.19.0.222
+    - 172.19.0.223
+    tenant:
+    - 172.16.0.221
+    - 172.16.0.222
+    - 172.16.0.223
+

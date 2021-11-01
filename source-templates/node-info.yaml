@@ -1,0 +1,9 @@
+parameter_defaults:
+  ComputeCount: 1
+  ControllerCount: 3 
+  OvercloudComputeFlavor: compute  
+  OvercloudControllerFlavor: control
+  ControlPlaneDefaultRoute: 192.0.2.254
+resource_registry:
+  OS::TripleO::Compute::Net::SoftwareConfig: compute.yaml
+  OS::TripleO::Controller::Net::SoftwareConfig: controller.yaml

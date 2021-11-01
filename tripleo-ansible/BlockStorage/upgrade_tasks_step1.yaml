@@ -1,0 +1,71 @@
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - never
+  - nova_hybrid_state
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- file:
+    path: /etc/cron.daily/containers-tmpwatch
+    state: absent
+  name: Ensure old cron.daily is absent
+  when: step|int == 1
+- block:
+  - args:
+      executable: /bin/bash
+      warn: false
+    changed_when: _selinux_config_data.rc == 2
+    failed_when: _selinux_config_data.rc not in [0,2]
+    name: Ensure /var/lib/config-data context
+    register: _selinux_config_data
+    shell: "set -o pipefail\nif [[ -e /var/lib/config-data ]]; then\n  chcon -R -t\
+      \ container_file_t /var/lib/config-data\n  exit 2\nfi"
+  - lineinfile:
+      dest: /etc/hosts
+      line: '{{ undercloud_hosts_entries | join('''') }}'
+      state: present
+    name: Make sure the Undercloud hostname is included in /etc/hosts
+    when:
+    - undercloud_hosts_entries is defined
+  - name: Set container_registry_insecure_registries fact.
+    set_fact:
+      container_registry_insecure_registries: []
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_install.yml
+    vars:
+      tripleo_container_registry_insecure_registries: '{{ container_registry_insecure_registries
+        }}'
+  name: Run podman install
+  when:
+  - step|int == 1
+- name: Stop snmp service
+  service: name=snmpd state=stopped
+  when:
+  - step|int == 1
+  - snmpd_enabled|bool
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - always
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- name: Set leapp facts
+  set_fact:
+    upgrade_leapp_command_options: ''
+    upgrade_leapp_debug: true
+    upgrade_leapp_devel_skip: ''
+    upgrade_leapp_enabled: "{{ _upgradeLeappEnabled | bool and\n   ansible_facts['distribution']\
+      \ == 'RedHat' and\n   ansible_facts['distribution_major_version'] is version('7',\
+      \ '==') }}"
+    upgrade_leapp_post_reboot_delay: 120
+    upgrade_leapp_reboot_timeout: 3600
+  tags:
+  - always
+  vars:
+    _upgradeLeappEnabled: false
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false

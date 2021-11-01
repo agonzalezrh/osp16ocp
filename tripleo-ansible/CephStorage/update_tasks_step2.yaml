@@ -1,0 +1,16 @@
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false
+- name: Special treatment for OpenvSwitch
+  register: ovs_upgrade
+  tripleo_ovs_upgrade: null
+  when:
+  - step|int == 2
+- name: Always ensure the openvswitch service is enabled and running after upgrades
+  service:
+    enabled: true
+    name: openvswitch
+    state: started
+  when:
+  - step|int == 2
+  - ovs_upgrade.changed|bool
