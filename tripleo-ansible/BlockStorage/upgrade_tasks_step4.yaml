@@ -1,0 +1,114 @@
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - never
+  - nova_hybrid_state
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - always
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- name: Set leapp facts
+  set_fact:
+    upgrade_leapp_command_options: ''
+    upgrade_leapp_debug: true
+    upgrade_leapp_devel_skip: ''
+    upgrade_leapp_enabled: "{{ _upgradeLeappEnabled | bool and\n   ansible_facts['distribution']\
+      \ == 'RedHat' and\n   ansible_facts['distribution_major_version'] is version('7',\
+      \ '==') }}"
+    upgrade_leapp_post_reboot_delay: 120
+    upgrade_leapp_reboot_timeout: 3600
+  tags:
+  - always
+  vars:
+    _upgradeLeappEnabled: false
+- block:
+  - ignore_errors: true
+    mount: path=/var/lib/glance/images state=absent
+    name: unmount and remove nfs glance entry
+  - ignore_errors: true
+    mount: path="{{glance_node_staging_uri[7:]}}" state=absent
+    name: unmount and remove nfs glance staging entry
+    vars:
+      glance_node_staging_uri: file:///var/lib/glance/staging
+  - ignore_errors: true
+    mount: path=/var/lib/nova/instances state=absent
+    name: unmount and remove nfs nova entry
+  - lineinfile:
+      path: /usr/share/leapp-repository/repositories/system_upgrade/el7toel8/actors/kernel/checkkerneldrivers/files/removed_drivers.txt
+      regexp: '{{ item }}'
+      state: absent
+    loop: '{{ modules_to_unload }}'
+    name: Remove kernel drivers from Leapp removed_drivers.txt before running Leapp
+    vars:
+      modules_to_unload:
+      - floppy
+      - pata_acpi
+  - name: set leapp options
+    shell: 'leapp answer --section remove_pam_pkcs11_module_check.confirm=True --add
+
+      '
+  - name: run leapp upgrade (download packages)
+    shell: '{% if upgrade_leapp_devel_skip|default(false) %}{{ upgrade_leapp_devel_skip
+      }}{% endif %} leapp upgrade {% if upgrade_leapp_debug|default(true) %}--debug{%
+      endif %} {% if upgrade_leapp_command_options|default(false) %}{{ upgrade_leapp_command_options
+      }}{% endif %}
+
+      '
+  name: system_upgrade_prepare step 4
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 4
+  - upgrade_leapp_enabled
+- block:
+  - block:
+    - name: null
+      shell: 'NEXT_BOOT="$(efibootmgr -v | grep \\redhat | awk -F''[ t*]'' ''{print
+        $2}'')"
+
+        efibootmgr -n $NEXT_BOOT
+
+        '
+    - name: Stat /boot/grub2/grubenv
+      register: grubenv
+      stat:
+        path: /boot/grub2/grubenv
+    - copy:
+        dest: /boot/efi/EFI/redhat/grubenv
+        remote_src: true
+        src: /boot/grub2/grubenv
+      name: Copy /boot/grub2/grubenv to /boot/efi/EFI/redhat/grubenv
+      when: grubenv.stat.islnk is defined and grubenv.stat.islnk == False
+    name: Reset boot order if WA#1925078 fired and fix grubenv
+    when:
+    - workaround_1925078_fired is defined
+    - workaround_1925078_fired|bool
+  - name: reboot to perform the upgrade
+    reboot:
+      post_reboot_delay: '{{ upgrade_leapp_post_reboot_delay }}'
+      reboot_timeout: '{{upgrade_leapp_reboot_timeout}}'
+      test_command: systemctl is-system-running | grep -e running -e degraded
+  - name: Set the python to python3
+    shell: alternatives --set python /usr/bin/python3
+    vars:
+      ansible_python_interpreter: /usr/bin/python3
+  name: system_upgrade_run step 4
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_run
+  - system_upgrade_reboot
+  when:
+  - step|int == 4
+  - upgrade_leapp_enabled
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false

@@ -1,0 +1,369 @@
+- block:
+  - become: true
+    command: '{{ container_cli }} exec cinder_api cinder-manage db online_data_migrations'
+    delegate_to: '{{ groups[''cinder_api''][0] }}'
+    name: Online data migration for Cinder
+    tags:
+    - online_upgrade
+    - online_upgrade_cinder
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop cinder api container
+    vars:
+      tripleo_containers_to_stop:
+      - cinder_api
+      - cinder_api_cron
+      tripleo_delegate_to: '{{ groups[''cinder_api''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop cinder scheduler container
+    vars:
+      tripleo_containers_to_stop:
+      - cinder_scheduler
+      tripleo_delegate_to: '{{ groups[''cinder_scheduler''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop clustercheck container
+    vars:
+      tripleo_containers_to_stop:
+      - clustercheck
+      tripleo_delegate_to: '{{ groups[''clustercheck''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop glance api container
+    vars:
+      tripleo_containers_to_stop:
+      - glance_api
+      tripleo_delegate_to: '{{ groups[''glance_api''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop heat api container
+    vars:
+      tripleo_containers_to_stop:
+      - heat_api
+      - heat_api_cron
+      tripleo_delegate_to: '{{ groups[''heat_api''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop heat cfn container
+    vars:
+      tripleo_containers_to_stop:
+      - heat_api_cfn
+      tripleo_delegate_to: '{{ groups[''heat_api_cfn''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop heat engine container
+    vars:
+      tripleo_containers_to_stop:
+      - heat_engine
+      tripleo_delegate_to: '{{ groups[''heat_engine''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop horizon container
+    vars:
+      tripleo_containers_to_stop:
+      - horizon
+      tripleo_delegate_to: '{{ groups[''horizon''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop keystone container
+    vars:
+      tripleo_containers_to_stop:
+      - keystone
+      - keystone_cron
+      tripleo_delegate_to: '{{ groups[''keystone''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop memcached container
+    vars:
+      tripleo_containers_to_stop:
+      - memcached
+      tripleo_delegate_to: '{{ groups[''memcached''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- become: true
+  name: Rename old neutron database to ovs_neutron
+  shell: "if [ -d /var/lib/mysql/neutron ] ; then\n  mysql -e \"CREATE DATABASE IF\
+    \ NOT EXISTS \\`ovs_neutron\\`;\"\n  for table in `mysql -B -N -e \"SHOW TABLES;\"\
+    \ neutron`\n    do\n      mysql -e \"RENAME TABLE \\`neutron\\`.\\`$table\\` to\
+    \ \\`ovs_neutron\\`.\\`$table\\`\"\n    done\n  mysql -e \"DROP DATABASE \\`neutron\\\
+    `;\"\nfi\n"
+  tags:
+  - never
+  - system_upgrade_stop_services
+  when:
+  - step|int == 2
+- block:
+  - include_role:
+      name: tripleo-transfer
+    name: Transfer mysql data
+    vars:
+      tripleo_transfer_dest_dir: /var/lib/mysql
+      tripleo_transfer_dest_host: '{{hostvars[groups[''overcloud''][0]][''mysql_short_bootstrap_node_name'']}}'
+      tripleo_transfer_flag_file: /var/lib/tripleo/transfer-flags/var-lib-mysql
+      tripleo_transfer_src_dir: /var/lib/mysql
+      tripleo_transfer_src_host: '{{hostvars[groups[''overcloud''][0]][''mysql_short_node_names''][1]}}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  vars:
+    mysql_upgrade_transfer: true
+  when:
+  - step|int == 2
+  - mysql_upgrade_transfer
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop neutron api container
+    vars:
+      tripleo_containers_to_stop:
+      - neutron_api
+      tripleo_delegate_to: '{{ groups[''neutron_api''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop nova api container
+    vars:
+      tripleo_containers_to_stop:
+      - nova_api
+      - nova_placement
+      - nova_api_cron
+      tripleo_delegate_to: '{{ groups[''nova_api''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - become: true
+    command: '{{ container_cli }} exec nova_conductor nova-manage db online_data_migrations'
+    delegate_to: '{{ groups[''nova_conductor''][0] }}'
+    name: Online data migration for Nova
+    tags:
+    - online_upgrade
+    - online_upgrade_nova
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop nova conductor container
+    vars:
+      tripleo_containers_to_stop:
+      - nova_conductor
+      tripleo_delegate_to: '{{ groups[''nova_conductor''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop nova metadata container
+    vars:
+      tripleo_containers_to_stop:
+      - nova_metadata
+      tripleo_delegate_to: '{{ groups[''nova_metadata''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop nova scheduler container
+    vars:
+      tripleo_containers_to_stop:
+      - nova_scheduler
+      tripleo_delegate_to: '{{ groups[''nova_scheduler''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop nova vnc proxy container
+    vars:
+      tripleo_containers_to_stop:
+      - nova_vnc_proxy
+      tripleo_delegate_to: '{{ groups[''nova_vnc_proxy''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop logrotate container
+    vars:
+      tripleo_containers_to_stop:
+      - logrotate_crond
+      tripleo_delegate_to: '{{ groups[''logrotate_crond''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - become: true
+    delegate_to: '{{ item }}'
+    name: Stop cluster
+    shell: "set -eu\nFILE=/usr/sbin/pcs\nif test -f \"$FILE\"; then\n  /usr/sbin/pcs\
+      \ cluster stop --force\nfi\n"
+    with_items: '{{ groups[''pacemaker''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_stop_services
+  - system_upgrade_transfer_data
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop swift-proxy container
+    vars:
+      tripleo_containers_to_stop:
+      - swift-proxy
+      tripleo_delegate_to: '{{ groups[''swift_proxy''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop swift-ringbuilder container
+    vars:
+      tripleo_containers_to_stop:
+      - swift-ringbuilder
+      tripleo_delegate_to: '{{ groups[''swift_ringbuilder''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop swift-storage container
+    vars:
+      tripleo_containers_to_stop:
+      - swift-storage
+      tripleo_delegate_to: '{{ groups[''swift_storage''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1
+- block:
+  - include_role:
+      name: tripleo-persist
+      tasks_from: cleanup.yml
+    name: cleanup tripleo_persist
+  name: Clean up upgrade artifacts
+  tags:
+  - never
+  - system_upgrade_cleanup
+  when: step|int == 1
+- block:
+  - import_role:
+      name: tripleo-container-stop
+    name: Stop cinder volume container
+    vars:
+      tripleo_containers_to_stop:
+      - cinder_volume
+      tripleo_delegate_to: '{{ groups[''cinder_volume''] | default([]) }}'
+  tags:
+  - never
+  - system_upgrade_transfer_data
+  - system_upgrade_stop_services
+  when:
+  - step|int == 1

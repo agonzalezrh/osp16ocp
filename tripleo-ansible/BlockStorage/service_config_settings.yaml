@@ -1,0 +1,4 @@
+rsyslog:
+  tripleo_logging_sources_cinder_volume:
+  - file: /var/log/containers/cinder/cinder-volume.log
+    tag: openstack.cinder.volume

@@ -1,0 +1,8 @@
+parameter_defaults:
+  ComputeHostnameFormat: compute-%index%
+  ControlPlaneHostnameFormat: controlplane-%index%
+  ControllerHostnameFormat: controller-%index%
+  ComputeCount: 2
+  ControlPlaneCount: 1
+  ControllerCount: 3
+

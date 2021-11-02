@@ -1,0 +1,116 @@
+/var/lib/kolla/config_files/logrotate-crond.json:
+  command: /usr/sbin/crond -s -n
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_account_auditor.json:
+  command: /usr/bin/swift-account-auditor /etc/swift/account-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_account_reaper.json:
+  command: /usr/bin/swift-account-reaper /etc/swift/account-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_account_replicator.json:
+  command: /usr/bin/swift-account-replicator /etc/swift/account-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_account_server.json:
+  command: /usr/bin/swift-account-server /etc/swift/account-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_container_auditor.json:
+  command: /usr/bin/swift-container-auditor /etc/swift/container-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_container_replicator.json:
+  command: /usr/bin/swift-container-replicator /etc/swift/container-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_container_server.json:
+  command: /usr/bin/swift-container-server /etc/swift/container-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_container_sharder.json:
+  command: /usr/bin/swift-container-sharder /etc/swift/container-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_container_updater.json:
+  command: /usr/bin/swift-container-updater /etc/swift/container-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_object_auditor.json:
+  command: /usr/bin/swift-object-auditor /etc/swift/object-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_object_expirer.json:
+  command: /usr/bin/swift-object-expirer /etc/swift/object-expirer.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_object_replicator.json:
+  command: /usr/bin/swift-object-replicator /etc/swift/object-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_object_server.json:
+  command: /usr/bin/swift-object-server /etc/swift/object-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+  permissions:
+  - owner: swift:swift
+    path: /var/cache/swift
+    recurse: true
+/var/lib/kolla/config_files/swift_object_updater.json:
+  command: /usr/bin/swift-object-updater /etc/swift/object-server.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*
+/var/lib/kolla/config_files/swift_rsync.json:
+  command: /usr/bin/rsync --daemon --no-detach --config=/etc/rsyncd.conf
+  config_files:
+  - dest: /
+    merge: true
+    preserve_properties: true
+    source: /var/lib/kolla/config_files/src/*

@@ -1,0 +1,19 @@
+- config_image: registry.redhat.io/rhosp-rhel8/openstack-cinder-api:16.2
+  config_volume: cinder
+  puppet_tags: cinder_config,file,concat,file_line
+  step_config: 'include ::tripleo::profile::base::lvm
+
+    include ::tripleo::profile::base::cinder::volume
+
+    include ::tripleo::profile::base::database::mysql::client'
+- config_image: registry.redhat.io/rhosp-rhel8/openstack-iscsid:16.2
+  config_volume: iscsid
+  puppet_tags: iscsid_config
+  step_config: 'include ::tripleo::profile::base::iscsid
+
+    '
+  volumes:
+  - /etc/iscsi:/etc/iscsi:z
+- config_image: registry.redhat.io/rhosp-rhel8/openstack-cron:16.2
+  config_volume: crond
+  step_config: include ::tripleo::profile::base::logging::logrotate
