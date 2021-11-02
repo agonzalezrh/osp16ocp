@@ -1,0 +1,110 @@
+- failed_when: false
+  name: Remove openstack-nova-compute and python-nova package during upgrade
+  package:
+    name:
+    - openstack-nova-compute
+    - python-nova
+    state: removed
+  when: step|int == 2
+- file:
+    path: /etc/cron.daily/containers-tmpwatch
+    state: absent
+  name: Ensure old cron.daily is absent
+  when: step|int == 1
+- block:
+  - args:
+      executable: /bin/bash
+      warn: false
+    changed_when: _selinux_config_data.rc == 2
+    failed_when: _selinux_config_data.rc not in [0,2]
+    name: Ensure /var/lib/config-data context
+    register: _selinux_config_data
+    shell: "set -o pipefail\nif [[ -e /var/lib/config-data ]]; then\n  chcon -R -t\
+      \ container_file_t /var/lib/config-data\n  exit 2\nfi"
+  - lineinfile:
+      dest: /etc/hosts
+      line: '{{ undercloud_hosts_entries | join('''') }}'
+      state: present
+    name: Make sure the Undercloud hostname is included in /etc/hosts
+    when:
+    - undercloud_hosts_entries is defined
+  - name: Set container_registry_insecure_registries fact.
+    set_fact:
+      container_registry_insecure_registries: []
+  - include_role:
+      name: tripleo-podman
+      tasks_from: tripleo_podman_install.yml
+    vars:
+      tripleo_container_registry_insecure_registries: '{{ container_registry_insecure_registries
+        }}'
+  name: Run podman registry configuration
+  when:
+  - step|int == 1
+- include_role:
+    name: tripleo-redhat-enforce
+  name: Enforce RHOSP rules regarding subscription.
+  vars:
+    skip_rhel_enforcement: 'false'
+  when:
+  - step|int == 0
+  - ansible_facts['distribution'] == 'RedHat'
+  - not (skip_rhel_enforcement | bool)
+- dnf:
+    name: '@{{ item.module }}:{{ item.stream }}/{{ item.profile|default(''common'')
+      }}'
+    state: present
+  loop: '{{ dnf_module_list|list }}'
+  name: Ensure DNF modules have the right stream
+  vars:
+    dnf_module_list: []
+  when:
+  - step|int == 0
+  - ansible_facts['distribution_major_version'] is version('8', '>=')
+  - dnf_module_list|length > 0
+- name: Ensure virt module packages are not installed on the host.
+  shell: 'dnf module remove -y --all virt
+
+    '
+  when:
+  - step|int == 0
+  - ansible_facts['distribution_major_version'] is version('8', '>=')
+- name: Check for existing yum.pid
+  register: yum_pid_file
+  stat: path=/var/run/yum.pid
+  when: step|int == 0 or step|int == 3
+- fail: msg="ERROR existing yum.pid detected - can't continue! Please ensure there
+    is no other package update process for the duration of the minor update worfklow.
+    Exiting."
+  name: Exit if existing yum process
+  when: (step|int == 0 or step|int == 3) and yum_pid_file.stat.exists
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false
+- name: Special treatment for OpenvSwitch
+  register: ovs_upgrade
+  tripleo_ovs_upgrade: null
+  when:
+  - step|int == 2
+- name: Always ensure the openvswitch service is enabled and running after upgrades
+  service:
+    enabled: true
+    name: openvswitch
+    state: started
+  when:
+  - step|int == 2
+  - ovs_upgrade.changed|bool
+- name: Update all packages
+  when:
+  - step|int == 3
+  - not skip_package_update|bool
+  yum:
+    exclude: ansible
+    name: '*'
+    state: latest
+- ignore_errors: true
+  name: Ensure openvswitch is running after update
+  service:
+    enabled: true
+    name: openvswitch
+    state: started
+  when: step|int == 3

@@ -1,0 +1,531 @@
+- block:
+  - name: fix grub entries to have name start with GRUB_
+    replace:
+      path: /etc/default/grub
+      regexp: ^(TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS)(.*)
+      replace: GRUB_\1\2
+  - name: fix grub entries in append statement
+    replace:
+      path: /etc/default/grub
+      regexp: (.*){(TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS)}(.*)
+      replace: \1{GRUB_\2}\3
+  name: upgrade prepare for leapp to align kernel arg shortcommings in leapp
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 3
+  - upgrade_leapp_enabled
+- block:
+  - name: Get container cinder_volume image
+    set_fact:
+      cinder_volume_image: registry.redhat.io/rhosp-rhel8/openstack-cinder-volume:16.2
+      cinder_volume_image_latest: cluster.common.tag/openstack-cinder-volume:pcmklatest
+  - command: '{{container_cli}} pull {{cinder_volume_image}}'
+    delay: 3
+    name: Pull latest cinder_volume images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous cinder_volume image id
+    register: old_cinder_volume_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{cinder_volume_image_latest}}'
+  - name: Get new cinder_volume image id
+    register: new_cinder_volume_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{cinder_volume_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest cinder_volume image
+    vars:
+      container_image: '{{cinder_volume_image}}'
+      container_image_latest: '{{cinder_volume_image_latest}}'
+    when:
+    - old_cinder_volume_image_id.stdout != new_cinder_volume_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- block:
+  - name: Get container haproxy image
+    set_fact:
+      haproxy_image: registry.redhat.io/rhosp-rhel8/openstack-haproxy:16.2
+      haproxy_image_latest: cluster.common.tag/openstack-haproxy:pcmklatest
+  - command: '{{container_cli}} pull {{haproxy_image}}'
+    delay: 3
+    name: Pull latest haproxy images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous haproxy image id
+    register: old_haproxy_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{haproxy_image_latest}}'
+  - name: Get new haproxy image id
+    register: new_haproxy_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{haproxy_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest haproxy image
+    vars:
+      container_image: '{{haproxy_image}}'
+      container_image_latest: '{{haproxy_image_latest}}'
+    when:
+    - old_haproxy_image_id.stdout != new_haproxy_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - never
+  - nova_hybrid_state
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- block:
+  - include_role:
+      name: tripleo-persist
+      tasks_from: persist.yml
+    name: Persist mysql data
+    vars:
+      tripleo_persist_dir: /var/lib/mysql
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  vars:
+    mysql_upgrade_persist: false
+  when:
+  - step|int == 3
+  - mysql_upgrade_persist
+- block:
+  - name: Get container galera image
+    set_fact:
+      galera_image: registry.redhat.io/rhosp-rhel8/openstack-mariadb:16.2
+      galera_image_latest: cluster.common.tag/openstack-mariadb:pcmklatest
+  - command: '{{container_cli}} pull {{galera_image}}'
+    delay: 3
+    name: Pull latest galera images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous galera image id
+    register: old_galera_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{galera_image_latest}}'
+  - name: Get new galera image id
+    register: new_galera_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{galera_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest galera image
+    vars:
+      container_image: '{{galera_image}}'
+      container_image_latest: '{{galera_image_latest}}'
+    when:
+    - old_galera_image_id.stdout != new_galera_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- block:
+  - name: Update host mariadb packages
+    package: name=mariadb-server-galera state=latest
+    when: step|int == 3
+  - name: Mysql upgrade script
+    set_fact:
+      mysql_upgrade_script: 'kolla_set_configs
+
+        if mysqladmin ping --silent; then exit 0; fi
+
+        chown -R mysql:mysql /var/lib/mysql
+
+        chown -R mysql:mysql /var/log/mysql
+
+        mysqld_safe --user=mysql --wsrep-provider=none --skip-networking --wsrep-on=off
+        --log-error=/var/log/mysql/mysqld-upgrade.log &
+
+
+        #!/bin/bash
+
+
+        set -e
+
+
+        # Wait until we know the mysql server is up and responding
+
+        timeout ${DB_MAX_TIMEOUT:-60} /bin/bash -c ''until mysqladmin -uroot ping
+        2>/dev/null; do sleep 1; done''
+
+
+        # After an upgrade, make sure that the running mysql had a chance to
+
+        # update its data table on disk.
+
+        mysql_upgrade
+
+
+        # Upgrade to 10.3: the default table row format changed from COMPACT
+
+        # to DYNAMIC, so upgrade the existing tables.
+
+        compact_tables=$(mysql -se ''SELECT CONCAT("`",TABLE_SCHEMA,"`.`",TABLE_NAME,"`")
+        FROM information_schema.tables WHERE ENGINE = "InnoDB" and ROW_FORMAT = "Compact";'');
+
+        for i in $compact_tables; do echo converting row format of table $i; mysql
+        -e "ALTER TABLE $i ROW_FORMAT=DYNAMIC;"; done;
+
+
+        mysqladmin shutdown'
+  - name: Bind mounts for temporary container
+    set_fact:
+      mysql_upgrade_db_bind_mounts:
+      - /etc/hosts:/etc/hosts:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/pki/ca-trust/extracted:/etc/pki/ca-trust/extracted:ro
+      - /etc/pki/ca-trust/source/anchors:/etc/pki/ca-trust/source/anchors:ro
+      - /etc/pki/tls/certs/ca-bundle.crt:/etc/pki/tls/certs/ca-bundle.crt:ro
+      - /etc/pki/tls/certs/ca-bundle.trust.crt:/etc/pki/tls/certs/ca-bundle.trust.crt:ro
+      - /etc/pki/tls/cert.pem:/etc/pki/tls/cert.pem:ro
+      - /dev/log:/dev/log
+      - /etc/puppet:/etc/puppet:ro
+      - /var/lib/kolla/config_files/mysql.json:/var/lib/kolla/config_files/config.json:rw,z
+      - /var/lib/config-data/puppet-generated/mysql:/var/lib/kolla/config_files/src:ro,z
+      - /var/lib/mysql:/var/lib/mysql:rw,z
+      - /var/log/containers/mysql:/var/log/mysql:rw,z
+  - environment:
+      UPGRADE_SCRIPT: '{{ mysql_upgrade_script }}'
+    name: Upgrade Mysql database from a temporary container
+    shell: '{{ container_cli }} run --rm --log-driver=k8s-file --log-opt path=/var/log/containers/mysql/db-upgrade.log
+      \ -u root --net=host -e "KOLLA_CONFIG_STRATEGY=COPY_ALWAYS" -v {{ mysql_upgrade_db_bind_mounts
+      | join('' -v '')}} "cluster.common.tag/openstack-mariadb:pcmklatest" /bin/bash
+      -ecx "$UPGRADE_SCRIPT"'
+  name: Check and upgrade Mysql database after major version upgrade
+  when: step|int == 3
+- block:
+  - command: '{{container_cli}} pull {{ovn_dbs_image}}'
+    delay: 3
+    name: Pull latest ovn-dbs images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous ovn_dbs image id
+    register: old_ovn_dbs_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{ovn_dbs_image_latest}}'
+  - name: Get new ovn_dbs image id
+    register: new_ovn_dbs_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{ovn_dbs_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest ovn_dbs image
+    vars:
+      container_image: '{{ovn_dbs_image}}'
+      container_image_latest: '{{ovn_dbs_image_latest}}'
+    when:
+    - old_ovn_dbs_image_id.stdout != new_ovn_dbs_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- block:
+  - name: Get container rabbitmq image
+    set_fact:
+      rabbitmq_image: registry.redhat.io/rhosp-rhel8/openstack-rabbitmq:16.2
+      rabbitmq_image_latest: cluster.common.tag/openstack-rabbitmq:pcmklatest
+  - command: '{{container_cli}} pull {{rabbitmq_image}}'
+    delay: 3
+    name: Pull latest rabbitmq images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous rabbitmq image id
+    register: old_rabbitmq_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{rabbitmq_image_latest}}'
+  - name: Get new rabbitmq image id
+    register: new_rabbitmq_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{rabbitmq_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest rabbitmq image
+    vars:
+      container_image: '{{rabbitmq_image}}'
+      container_image_latest: '{{rabbitmq_image_latest}}'
+    when:
+    - old_rabbitmq_image_id.stdout != new_rabbitmq_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- block:
+  - name: Get container redis image
+    set_fact:
+      redis_image: registry.redhat.io/rhosp-rhel8/openstack-redis:16.2
+      redis_image_latest: cluster.common.tag/openstack-redis:pcmklatest
+  - command: '{{container_cli}} pull {{redis_image}}'
+    delay: 3
+    name: Pull latest redis images
+    register: result
+    retries: 3
+    until: result.rc == 0
+  - failed_when: false
+    name: Get previous redis image id
+    register: old_redis_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{redis_image_latest}}'
+  - name: Get new redis image id
+    register: new_redis_image_id
+    shell: '{{container_cli}} inspect --format ''{{''{{''}}.Id{{''}}''}}'' {{redis_image}}'
+  - include_role:
+      name: tripleo-container-tag
+    name: Retag pcmklatest to latest redis image
+    vars:
+      container_image: '{{redis_image}}'
+      container_image_latest: '{{redis_image_latest}}'
+    when:
+    - old_redis_image_id.stdout != new_redis_image_id.stdout
+  name: Retag the pacemaker image if containerized
+  when:
+  - step|int == 3
+- block:
+  - args:
+      creates: /etc/sysconfig/ip6tables.n-o-upgrade
+    name: blank ipv6 rule before activating ipv6 firewall.
+    shell: cat /etc/sysconfig/ip6tables > /etc/sysconfig/ip6tables.n-o-upgrade; cat</dev/null>/etc/sysconfig/ip6tables
+  - name: cleanup unmanaged rules pushed by iptables-services
+    shell: "iptables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null\
+      \ && \\\n  iptables -D INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT\n\
+      iptables -C INPUT -p icmp -j ACCEPT &>/dev/null && \\\n  iptables -D INPUT -p\
+      \ icmp -j ACCEPT\niptables -C INPUT -i lo -j ACCEPT &>/dev/null && \\\n  iptables\
+      \ -D INPUT -i lo -j ACCEPT\niptables -C INPUT -p tcp -m state --state NEW -m\
+      \ tcp --dport 22 -j ACCEPT &>/dev/null && \\\n  iptables -D INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT\niptables -C INPUT -j REJECT\
+      \ --reject-with icmp-host-prohibited &>/dev/null && \\\n  iptables -D INPUT\
+      \ -j REJECT --reject-with icmp-host-prohibited\niptables -C FORWARD -j REJECT\
+      \ --reject-with icmp-host-prohibited &>/dev/null && \\\n  iptables -D FORWARD\
+      \ -j REJECT --reject-with icmp-host-prohibited\n\nsed -i '/^-A INPUT -m state\
+      \ --state RELATED,ESTABLISHED -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i\
+      \ '/^-A INPUT -p icmp -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i '/^-A INPUT\
+      \ -i lo -j ACCEPT$/d' /etc/sysconfig/iptables\nsed -i '/^-A INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT$/d' /etc/sysconfig/iptables\n\
+      sed -i '/^-A INPUT -j REJECT --reject-with icmp-host-prohibited$/d' /etc/sysconfig/iptables\n\
+      sed -i '/^-A FORWARD -j REJECT --reject-with icmp-host-prohibited$/d' /etc/sysconfig/iptables\n\
+      \nip6tables -C INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT &>/dev/null\
+      \ && \\\n  ip6tables -D INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT\n\
+      ip6tables -C INPUT -p ipv6-icmp -j ACCEPT &>/dev/null && \\\n  ip6tables -D\
+      \ INPUT -p ipv6-icmp -j ACCEPT\nip6tables -C INPUT -i lo -j ACCEPT &>/dev/null\
+      \ && \\\n  ip6tables -D INPUT -i lo -j ACCEPT\nip6tables -C INPUT -p tcp -m\
+      \ state --state NEW -m tcp --dport 22 -j ACCEPT &>/dev/null && \\\n  ip6tables\
+      \ -D INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT\nip6tables\
+      \ -C INPUT -d fe80::/64 -p udp -m udp --dport 546 -m state --state NEW -j ACCEPT\
+      \ &>/dev/null && \\\n  ip6tables -D INPUT -d fe80::/64 -p udp -m udp --dport\
+      \ 546 -m state --state NEW -j ACCEPT\nip6tables -C INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited &>/dev/null && \\\n  ip6tables -D INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited\nip6tables -C FORWARD -j REJECT --reject-with icmp6-adm-prohibited\
+      \ &>/dev/null && \\\n  ip6tables -D FORWARD -j REJECT --reject-with icmp6-adm-prohibited\n\
+      \nsed -i '/^-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT$/d' /etc/sysconfig/ip6tables\n\
+      sed -i '/^-A INPUT -p ipv6-icmp -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed\
+      \ -i '/^-A INPUT -i lo -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A\
+      \ INPUT -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT$/d' /etc/sysconfig/ip6tables\n\
+      sed -i '/^-A INPUT -d fe80::\\/64 -p udp -m udp --dport 546 -m state --state\
+      \ NEW -j ACCEPT$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A INPUT -j REJECT --reject-with\
+      \ icmp6-adm-prohibited$/d' /etc/sysconfig/ip6tables\nsed -i '/^-A FORWARD -j\
+      \ REJECT --reject-with icmp6-adm-prohibited$/d' /etc/sysconfig/ip6tables"
+  when: step|int == 3
+- name: Gather missing facts
+  setup:
+    gather_subset: distribution
+  tags:
+  - always
+  when: ansible_facts['distribution'] is not defined or ansible_facts['distribution_major_version']
+    is not defined
+- name: Set leapp facts
+  set_fact:
+    upgrade_leapp_command_options: ''
+    upgrade_leapp_debug: true
+    upgrade_leapp_devel_skip: ''
+    upgrade_leapp_enabled: "{{ _upgradeLeappEnabled | bool and\n   ansible_facts['distribution']\
+      \ == 'RedHat' and\n   ansible_facts['distribution_major_version'] is version('7',\
+      \ '==') }}"
+    upgrade_leapp_post_reboot_delay: 120
+    upgrade_leapp_reboot_timeout: 3600
+  tags:
+  - always
+  vars:
+    _upgradeLeappEnabled: false
+- block:
+  - ignore_errors: true
+    name: Hack around broken ceph-common rpm removing /etc/ceph /var/lib/ceph
+    shell: 'rpm -e --nodeps --noscripts ceph-common
+
+      '
+  - name: remove all OpenStack packages
+    shell: yum -y remove *el7ost* galera* xinetd* haproxy* httpd kernel-devel mysql*
+      pacemaker* python-jsonpointer qemu-kvm-common-rhev qemu-img-rhev rabbit* redis*
+      -- -*openvswitch* -python-docker -python-PyMySQL -python-pysocks -python2-asn1crypto
+      -python2-babel -python2-cffi -python2-cryptography -python2-dateutil -python2-idna
+      -python2-ipaddress -python2-jinja2 -python2-jsonpatch -python2-markupsafe -python2-pyOpenSSL
+      -python2-requests -python2-six -python2-urllib3 -python2-chardet
+  - name: Run LeappRepoInitCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - name: Check if system was booted via EFI
+    register: efi
+    stat:
+      path: /sys/firmware/efi
+  - failed_when: false
+    name: Check if efi partition is present in /etc/fstab
+    register: efi_fstab
+    shell: 'grep efi /etc/fstab
+
+      '
+  - failed_when: false
+    name: Find out the UUID of UEFI device
+    register: efi_dev
+    shell: 'blkid -s UUID -o value "$(blkid -t TYPE=vfat | grep -i efi | cut -d '':''
+      -f1)"
+
+      '
+  - failed_when: false
+    name: Check if red is in efibootmgr
+    register: efi_broken
+    shell: 'efibootmgr | grep "red$"
+
+      '
+  - block:
+    - copy:
+        dest: /tmp/workaround_1925078_redhat/
+        remote_src: true
+        src: /boot/efi/EFI/redhat/
+      name: Copy /boot/efi/EFI/redhat to /tmp
+    - lineinfile:
+        dest: /etc/fstab
+        line: UUID={{ efi_dev.stdout }} /boot/efi vfat umask=0077 0 1
+      name: Insert /etc/fstab record
+    - command: mount /boot/efi
+      name: Mount the /boot/efi
+    - copy:
+        dest: /boot/efi/EFI/redhat/
+        remote_src: true
+        src: /tmp/workaround_1925078_redhat/
+      name: Copy /tmp/redhat to /boot/efi/EFI/redhat
+    - name: Create boot record
+      shell: 'DEVICE_PATH="$(blkid -t TYPE=vfat | grep -i efi | cut -d '':'' -f1)"
+
+        DEVICE="$(lsblk -no pkname $DEVICE_PATH)"
+
+        PARTITION="$(echo $DEVICE_PATH | awk ''{print $NF}'' FS=/$DEVICE)"
+
+        efibootmgr -c -L ''Red Hat Enterprise Linux'' -d $(echo $DEVICE_PATH | sed
+        s/$PARTITION\$//) -p $PARTITION -l ''\EFI\redhat\shimx64.efi''
+
+        '
+    - command: grub2-mkconfig -o /boot/efi/EFI/redhat/grub.cfg
+      name: Create grub config file
+    - command: rmmod btrfs
+      failed_when: false
+      name: Remove btrfs module in case fuse just loaded it
+    - name: Set workaround_1925078_fired
+      set_fact:
+        workaround_1925078_fired: true
+    when:
+    - efi_fstab.rc is defined
+    - efi_dev.rc is defined
+    - efi_broken.rc is defined
+    - efi.stat.exists|bool
+    - efi_fstab.rc == 1
+    - efi_dev.rc == 0
+    - efi_broken.rc == 0
+  - name: install leapp
+    package:
+      name: leapp
+      state: latest
+  - delegate_to: undercloud
+    find:
+      paths: /etc/leapp/files
+      patterns: '*'
+    name: Retrieve files in /etc/leapp/files
+    register: uc_leapp_files
+  - delegate_to: undercloud
+    fetch:
+      dest: '{{ playbook_dir }}'
+      src: '{{ item.path }}'
+    loop: '{{ uc_leapp_files.files }}'
+    name: Fetch the Leapp data from undercloud
+  - copy:
+      dest: '{{ item.path }}'
+      src: '{{ playbook_dir }}/{{ inventory_hostname }}/{{ item.path }}'
+    loop: '{{ uc_leapp_files.files }}'
+    name: Copy the Leapp data from undercloud
+  - name: Run LeappInitCommand
+    shell: '#!/bin/bash
+
+
+      '
+  - file:
+      path: /etc/modules-load.d/nf_conntrack_proto_sctp.conf
+      state: absent
+    name: Remove obsolete nf_conntrack_proto_sctp from /etc/modules-load.d/
+  - lineinfile:
+      line: '{{ item }}'
+      path: /etc/leapp/transaction/to_remove
+    loop: '{{ pkg_to_remove }}'
+    name: add packages into Leapp's to_remove file
+    vars:
+      pkg_to_remove: []
+  - lineinfile:
+      line: '{{ item }}'
+      path: /etc/leapp/transaction/to_install
+    loop: '{{ pkg_to_install }}'
+    name: add packages into Leapp's to_install file
+    vars:
+      pkg_to_install: []
+  - name: check sshd_config file
+    register: sshd_config_result
+    stat:
+      path: /etc/ssh/sshd_config
+  - lineinfile:
+      line: PermitRootLogin without-password
+      path: /etc/ssh/sshd_config
+      regexp: ^(# *)?PermitRootLogin
+    name: add PermitRootLogin option for leapp
+  name: system_upgrade_prepare step 3
+  tags:
+  - never
+  - system_upgrade
+  - system_upgrade_prepare
+  when:
+  - step|int == 3
+  - upgrade_leapp_enabled
+- name: Check for os-net-config upgrade
+  register: os_net_config_need_upgrade
+  shell: yum check-upgrade | awk '/os-net-config/{print}'
+  when: step|int == 3
+- failed_when: false
+  name: Check that os-net-config has configuration
+  register: os_net_config_has_config
+  shell: test -s /etc/os-net-config/config.json
+  when: step|int == 3
+- block:
+  - name: Upgrade os-net-config
+    package: name=os-net-config state=latest
+  - changed_when: os_net_config_upgrade.rc == 2
+    command: os-net-config --no-activate -c /etc/os-net-config/config.json -v --detailed-exit-codes
+    failed_when: os_net_config_upgrade.rc not in [0,2]
+    name: take new os-net-config parameters into account now
+    register: os_net_config_upgrade
+  when:
+  - step|int == 3
+  - os_net_config_need_upgrade.stdout
+  - os_net_config_has_config.rc == 0
+- name: Set boolean skip_package_update
+  set_fact:
+    skip_package_update: false
+- name: Update all packages
+  when:
+  - step|int == 3
+  - not skip_package_update|bool
+  yum:
+    exclude: ansible
+    name: '*'
+    state: latest

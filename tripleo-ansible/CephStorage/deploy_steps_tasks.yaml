@@ -1,0 +1,126 @@
+- include_role:
+    name: tuned
+  name: Configure tuned before reboot
+  vars:
+    tuned_isolated_cores: ''
+    tuned_profile: throughput-performance
+  when: step|int == 0
+- include_role:
+    name: tripleo-kernel
+    tasks_from: kernelargs.yml
+  name: Configure kernel args and reboot
+  vars:
+    tripleo_kernel_args: ''
+    tripleo_kernel_defer_reboot: false
+    tripleo_kernel_reboot_timeout: 900
+  when: step|int == 0
+- block:
+  - copy:
+      content: "#!/bin/sh\ntmpwatch --nodirs \\\n  -X \"/var/log/containers/*/*log\"\
+        \ \\\n  -X \"/var/log/containers/*/*/*log\" \\\n  -X \"/var/log/containers/*/*err\"\
+        \ \\\n  {{ LogrotatePurgeAfterDays|int +1 }}d \\\n  /var/log/containers/ 2>&1\
+        \ | logger -t container-tmpwatch\n"
+      dest: /usr/local/sbin/containers-tmpwatch
+      group: root
+      mode: 493
+      owner: root
+    name: Push script
+    vars:
+      LogrotatePurgeAfterDays: '14'
+  - cron:
+      job: /usr/local/sbin/containers-tmpwatch
+      name: Remove old logs
+      special_time: daily
+      user: root
+    name: Insert cronjob in root crontab
+  name: configure tmpwatch on the host
+  when: step|int == 2
+- block:
+  - become: true
+    delay: 5
+    loop: '{{ lookup(''file'', tripleo_role_name + ''/docker_config.yaml'', errors=''ignore'')
+      | default(''{}'', True) | from_yaml | recursive_get_key_from_dict(key=''image'')
+      | unique }}'
+    loop_control:
+      loop_var: prefetch_image
+    name: Pre-fetch all the containers
+    podman_image:
+      force: true
+      name: '{{ prefetch_image }}'
+      validate_certs: false
+    retries: 5
+  when:
+  - (step|int) == 1
+- block:
+  - copy:
+      content: '[Unit]
+
+        Description=Initialize iptables
+
+        Before=iptables.service
+
+        AssertPathExists=/etc/sysconfig/iptables
+
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/usr/sbin/iptables -t raw -nL
+
+        Environment=BOOTUP=serial
+
+        Environment=CONSOLETYPE=serial
+
+        StandardOutput=syslog
+
+        StandardError=syslog
+
+        [Install]
+
+        WantedBy=basic.target
+
+        '
+      dest: /etc/systemd/system/tripleo-iptables.service
+    name: create iptables service
+  - copy:
+      content: '[Unit]
+
+        Description=Initialize ip6tables
+
+        Before=ip6tables.service
+
+        AssertPathExists=/etc/sysconfig/ip6tables
+
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/usr/sbin/ip6tables -t raw -nL
+
+        Environment=BOOTUP=serial
+
+        Environment=CONSOLETYPE=serial
+
+        StandardOutput=syslog
+
+        StandardError=syslog
+
+        [Install]
+
+        WantedBy=basic.target
+
+        '
+      dest: /etc/systemd/system/tripleo-ip6tables.service
+    name: create ip6tables service
+  - name: enable tripleo-iptables service (and do a daemon-reload systemd)
+    systemd:
+      daemon_reload: true
+      enabled: true
+      name: tripleo-iptables.service
+  - name: enable tripleo-ip6tables service
+    systemd:
+      enabled: true
+      name: tripleo-ip6tables.service
+  when: step|int == 0

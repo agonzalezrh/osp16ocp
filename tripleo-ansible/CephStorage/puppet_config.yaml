@@ -1,0 +1,3 @@
+- config_image: registry.redhat.io/rhosp-rhel8/openstack-cron:16.2
+  config_volume: crond
+  step_config: include ::tripleo::profile::base::logging::logrotate

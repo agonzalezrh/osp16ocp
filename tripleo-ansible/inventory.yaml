@@ -1,0 +1,313 @@
+Undercloud:
+  hosts:
+    undercloud: {}
+  vars:
+    ansible_connection: local
+    ansible_host: localhost
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_remote_tmp: /tmp/ansible-${USER}
+    auth_url: null
+    cacert: null
+    os_auth_token: null
+    overcloud_admin_password: rg8ffsz58cllzcq9b5x4j5ztk
+    overcloud_horizon_url: http://10.0.0.220:80/dashboard
+    overcloud_keystone_url: http://10.0.0.220:5000
+    plan: overcloud
+    project_name: null
+    undercloud_service_list: [tripleo_nova_compute, tripleo_heat_engine, tripleo_ironic_conductor,
+      tripleo_swift_container_server, tripleo_swift_object_server, tripleo_mistral_engine]
+    undercloud_swift_url: null
+    username: null
+Controller:
+  hosts:
+    controller-0: {ansible_host: 192.0.2.222, canonical_hostname: controller-0.localdomain,
+      ctlplane_hostname: controller-0.ctlplane.localdomain, ctlplane_ip: 192.0.2.222,
+      deploy_server_id: 0f7e1cee-9aa8-4f4f-99a6-0471178e5f8c, external_hostname: controller-0.external.localdomain,
+      external_ip: 10.0.0.222, internal_api_hostname: controller-0.internalapi.localdomain,
+      internal_api_ip: 172.17.0.222, storage_hostname: controller-0.storage.localdomain,
+      storage_ip: 172.18.0.221, storage_mgmt_hostname: controller-0.storagemgmt.localdomain,
+      storage_mgmt_ip: 172.19.0.221, tenant_hostname: controller-0.tenant.localdomain,
+      tenant_ip: 172.16.0.221}
+    controller-1: {ansible_host: 192.0.2.223, canonical_hostname: controller-1.localdomain,
+      ctlplane_hostname: controller-1.ctlplane.localdomain, ctlplane_ip: 192.0.2.223,
+      deploy_server_id: 212276e6-c884-4943-8847-76347479840e, external_hostname: controller-1.external.localdomain,
+      external_ip: 10.0.0.223, internal_api_hostname: controller-1.internalapi.localdomain,
+      internal_api_ip: 172.17.0.223, storage_hostname: controller-1.storage.localdomain,
+      storage_ip: 172.18.0.222, storage_mgmt_hostname: controller-1.storagemgmt.localdomain,
+      storage_mgmt_ip: 172.19.0.222, tenant_hostname: controller-1.tenant.localdomain,
+      tenant_ip: 172.16.0.222}
+    controller-2: {ansible_host: 192.0.2.224, canonical_hostname: controller-2.localdomain,
+      ctlplane_hostname: controller-2.ctlplane.localdomain, ctlplane_ip: 192.0.2.224,
+      deploy_server_id: 9a818ecf-298d-4faf-af91-d4611308c89c, external_hostname: controller-2.external.localdomain,
+      external_ip: 10.0.0.224, internal_api_hostname: controller-2.internalapi.localdomain,
+      internal_api_ip: 172.17.0.224, storage_hostname: controller-2.storage.localdomain,
+      storage_ip: 172.18.0.223, storage_mgmt_hostname: controller-2.storagemgmt.localdomain,
+      storage_mgmt_ip: 172.19.0.223, tenant_hostname: controller-2.tenant.localdomain,
+      tenant_ip: 172.16.0.223}
+  vars:
+    ansible_ssh_user: cloud-admin
+    bootstrap_server_id: 0f7e1cee-9aa8-4f4f-99a6-0471178e5f8c
+    serial: 1
+    tripleo_role_name: Controller
+    tripleo_role_networks: [ctlplane, external, internal_api, storage, storage_mgmt,
+      tenant]
+Compute:
+  hosts:
+    compute-0: {ansible_host: 192.0.2.225, canonical_hostname: compute-0.localdomain,
+      ctlplane_hostname: compute-0.ctlplane.localdomain, ctlplane_ip: 192.0.2.225,
+      deploy_server_id: 42ff1d38-3582-4d14-a67e-df197cd82ca4, internal_api_hostname: compute-0.internalapi.localdomain,
+      internal_api_ip: 172.17.0.225, storage_hostname: compute-0.storage.localdomain,
+      storage_ip: 172.18.0.224, tenant_hostname: compute-0.tenant.localdomain, tenant_ip: 172.16.0.224}
+    compute-1: {ansible_host: 192.0.2.226, canonical_hostname: compute-1.localdomain,
+      ctlplane_hostname: compute-1.ctlplane.localdomain, ctlplane_ip: 192.0.2.226,
+      deploy_server_id: 367fe7f8-dcec-428e-94cf-21826a855d00, internal_api_hostname: compute-1.internalapi.localdomain,
+      internal_api_ip: 172.17.0.226, storage_hostname: compute-1.storage.localdomain,
+      storage_ip: 172.18.0.225, tenant_hostname: compute-1.tenant.localdomain, tenant_ip: 172.16.0.225}
+  vars:
+    ansible_ssh_user: cloud-admin
+    bootstrap_server_id: 0f7e1cee-9aa8-4f4f-99a6-0471178e5f8c
+    serial: 1
+    tripleo_role_name: Compute
+    tripleo_role_networks: [ctlplane, internal_api, storage, tenant]
+allovercloud:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {container_cli: podman, ctlplane_vip: 192.0.2.220, external_vip: 10.0.0.220,
+    internal_api_vip: 172.17.0.220, redis_vip: 192.0.2.220, storage_mgmt_vip: 172.19.0.220,
+    storage_vip: 172.18.0.220}
+overcloud:
+  children:
+    allovercloud: {}
+swift_proxy:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+keystone_public_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+glance_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+cinder_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+timezone:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+tripleo_packages:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+ovn_dbs:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+ovn_controller:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+cinder_volume:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+mysql:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_vnc_proxy:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+swift_storage:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+haproxy:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+iscsid:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+placement:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+chrony:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+keystone:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+logrotate_crond:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+sshd:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_libvirt_guests:
+  children:
+    Compute: {}
+  vars: {ansible_ssh_user: cloud-admin}
+heat_api_cloudwatch_disabled:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+heat_engine:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+oslo_messaging_notify:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_conductor:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+pacemaker:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+boot_params_service:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+neutron_plugin_ml2_ovn:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+cinder_scheduler:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_compute:
+  children:
+    Compute: {}
+  vars: {ansible_ssh_user: cloud-admin}
+ca_certs:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+heat_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+certmonger_user:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+oslo_messaging_rpc:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+swift_ringbuilder:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_migration_target:
+  children:
+    Compute: {}
+  vars: {ansible_ssh_user: cloud-admin}
+redis:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+ovn_metadata:
+  children:
+    Compute: {}
+  vars: {ansible_ssh_user: cloud-admin}
+memcached:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_metadata:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+keystone_admin_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+podman:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+tuned:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+neutron_api:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_scheduler:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+container_image_prepare:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+tripleo_firewall:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+clustercheck:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+heat_api_cfn:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+snmp:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+nova_libvirt:
+  children:
+    Compute: {}
+  vars: {ansible_ssh_user: cloud-admin}
+kernel:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+horizon:
+  children:
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
+mysql_client:
+  children:
+    Compute: {}
+    Controller: {}
+  vars: {ansible_ssh_user: cloud-admin}
